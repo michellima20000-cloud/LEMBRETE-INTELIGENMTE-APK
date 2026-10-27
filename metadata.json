@@ -1,0 +1,6 @@
+{
+  "name": "Lembrete Inteligente",
+  "description": "Agenda e alarmes inteligentes nativos com alta prioridade no bloqueio de tela",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

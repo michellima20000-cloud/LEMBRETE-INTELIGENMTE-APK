@@ -1,0 +1,18 @@
+{
+  "projectId": "lembrete-inteligente-core",
+  "databaseId": "(default)",
+  "firestoreRegion": "southamerica-east1",
+  "applicationId": "com.lembreteinteligente.app",
+  "users": {
+    "michel": {
+      "uid": "usr_68dd8a516780b021",
+      "email": "michel.lima123@gmail.com",
+      "role": "user"
+    },
+    "maya": {
+      "uid": "CiEoITiFP2PqVjFYzu0HZ3TXBmt2",
+      "email": "mayalimaalves50@gmail.com",
+      "role": "user"
+    }
+  }
+}
