@@ -66,12 +66,12 @@ fun DashboardScreen(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(
                                     Brush.linearGradient(
                                         listOf(Color(0xFF6366F1), Color(0xFF06B6D4))
@@ -86,125 +86,49 @@ fun DashboardScreen(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
-                        Row {
-                            Text(
-                                text = "Lembrete ",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-                            Text(
-                                text = "Inteligente",
-                                color = Color(0xFF818CF8),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-                        }
+                        Text(
+                            text = "Lembrete Inteligente",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
                     }
                 },
                 actions = {
-                    // APK Nativo badge
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF4F46E5),
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clickable { showBackgroundInfoDialog = true }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = "APK Nativo",
-                                color = Color.White,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    // Ativar 2º Plano badge
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF1E284A),
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clickable { showBackgroundInfoDialog = true }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = Color(0xFF818CF8),
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = "2º Plano",
-                                color = Color.White,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
                     // Sound Toggle Icon
                     IconButton(
                         onClick = { viewModel.toggleSound() },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
                             imageVector = if (state.soundEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
                             contentDescription = "Alternar som",
                             tint = if (state.soundEnabled) Color(0xFF818CF8) else Color(0xFF64748B),
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    // Haptics Toggle Icon
-                    IconButton(
-                        onClick = { viewModel.toggleVibration() },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (state.vibrationEnabled) Icons.Default.Vibration else Icons.Default.PhoneAndroid,
-                            contentDescription = "Alternar vibração",
-                            tint = if (state.vibrationEnabled) Color(0xFF06B6D4) else Color(0xFF64748B),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    Spacer(modifier = Modifier.width(2.dp))
 
                     // User Badge (M Michel / M Maya)
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = Color(0xFF1B2344),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2E3B68)),
                         modifier = Modifier
-                            .height(30.dp)
+                            .height(32.dp)
                             .clickable { showUserSwitchDialog = true }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(18.dp)
+                                    .size(20.dp)
                                     .clip(CircleShape)
                                     .background(Color(0xFF4F46E5)),
                                 contentAlignment = Alignment.Center
@@ -220,15 +144,17 @@ fun DashboardScreen(
                                 text = state.currentUser.name,
                                 color = Color.White,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
 
+                    Spacer(modifier = Modifier.width(2.dp))
+
                     // Logout Icon
                     IconButton(
                         onClick = { viewModel.logout() },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Logout,
@@ -337,6 +263,43 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
+                // Clean status indicator pill
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF131B38),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF222F5A)),
+                            modifier = Modifier.clickable { showBackgroundInfoDialog = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF10B981))
+                                )
+                                Text(
+                                    text = "APK Nativo • AlarmManager 2º Plano Ativo",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Command input card with native microphone recognition and live sound visualizer
                 item {
                     CommandInputCard(

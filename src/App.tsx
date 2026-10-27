@@ -362,65 +362,34 @@ export default function App() {
     <div className="min-h-screen bg-[#090D1C] text-slate-100 flex flex-col justify-between">
       {/* Top App Header */}
       <header className="border-b border-[#1A2344] bg-[#090D1C]/90 backdrop-blur sticky top-0 z-40 px-4 py-3">
-        <div className="max-w-4xl mx-auto flex flex-wrap justify-between items-center gap-2">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
           {/* Logo */}
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center shadow-md shadow-indigo-500/20">
+          <div className="flex items-center space-x-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center shadow-md shadow-indigo-500/20 flex-shrink-0">
               <Calendar className="w-4 h-4 text-white" />
             </div>
-            <h1 className="text-base md:text-lg font-bold tracking-tight">
+            <h1 className="text-base md:text-lg font-bold tracking-tight whitespace-nowrap">
               Lembrete <span className="text-indigo-400">Inteligente</span>
             </h1>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center space-x-1.5 md:space-x-2">
-            {/* Instalar App Badge */}
-            <button
-              onClick={() => setShowInfoModal(true)}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Instalar App</span>
-            </button>
-
-            {/* Ativar 2º Plano Badge */}
-            <button
-              onClick={() => setShowInfoModal(true)}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-[#1A2447] hover:bg-[#23305E] text-xs font-medium text-indigo-300 border border-[#2D3A6B] transition"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              <span>Ativar 2º Plano</span>
-            </button>
-
+          {/* Clean Action buttons */}
+          <div className="flex items-center space-x-2 flex-shrink-0">
             {/* Sound Toggle */}
             <button
               onClick={() => {
                 setSoundEnabled(!soundEnabled);
                 showToast(soundEnabled ? 'Som silenciado' : 'Som ativado');
               }}
-              className="p-1.5 rounded-lg bg-[#141C38] hover:bg-[#1C264D] text-indigo-400 transition"
+              className="p-2 rounded-xl bg-[#141C38] hover:bg-[#1C264D] text-indigo-400 transition"
               title="Alternar som"
             >
               {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
 
-            {/* Microchip / Haptics Toggle */}
-            <button
-              onClick={() => {
-                setVibrationEnabled(!vibrationEnabled);
-                showToast(vibrationEnabled ? 'Vibração desativada' : 'Vibração ativada');
-              }}
-              className="p-1.5 rounded-lg bg-[#141C38] hover:bg-[#1C264D] text-cyan-400 transition"
-              title="Hardware / Haptics"
-            >
-              <Cpu className="w-4 h-4" />
-            </button>
-
             {/* User Badge */}
             <button
               onClick={() => {
-                // Switch between Michel and Maya
                 if (user?.uid === KNOWN_USERS['usr_68dd8a516780b021'].uid) {
                   setUser(KNOWN_USERS['CiEoITiFP2PqVjFYzu0HZ3TXBmt2']);
                   showToast('Conectado como Maya (Isolamento Firestore ativo)');
@@ -429,19 +398,19 @@ export default function App() {
                   showToast('Conectado como Michel (Isolamento Firestore ativo)');
                 }
               }}
-              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[#1B2344] hover:bg-[#242F5C] border border-[#2B3968] text-xs transition"
+              className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[#1B2344] hover:bg-[#242F5C] border border-[#2B3968] text-xs transition"
               title="Alternar conta isolada"
             >
               <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white text-[10px]">
                 {user?.name.charAt(0) || 'M'}
               </div>
-              <span className="font-medium text-white">{user?.name || 'Michel'}</span>
+              <span className="font-semibold text-white">{user?.name || 'Michel'}</span>
             </button>
 
             {/* Logout */}
             <button
               onClick={() => setIsAuthenticated(false)}
-              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
+              className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition"
               title="Sair"
             >
               <LogOut className="w-4 h-4" />
@@ -451,7 +420,17 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-4xl mx-auto w-full flex-1 px-4 py-6 space-y-6">
+      <main className="max-w-4xl mx-auto w-full flex-1 px-4 py-5 space-y-5">
+        {/* Clean System Status Pill */}
+        <div className="flex justify-center">
+          <button
+            onClick={() => setShowInfoModal(true)}
+            className="flex items-center space-x-2 px-3 py-1 rounded-full bg-[#131B38] border border-[#222F5A] text-slate-400 hover:text-slate-200 text-xs transition shadow-sm"
+          >
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-medium">APK Nativo • AlarmManager 2º Plano Ativo</span>
+          </button>
+        </div>
         {/* Natural Language Command Card */}
         <div className="bg-[#121933] border border-[#1F2A52] rounded-2xl p-4 md:p-5 shadow-xl">
           <textarea
