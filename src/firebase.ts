@@ -3,12 +3,12 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCSxt9VNzPwLNDv9tCZpZbnXszgbT72fps",
-  authDomain: "lembrete-inteligente-b6cd1.firebaseapp.com",
-  projectId: "lembrete-inteligente-b6cd1",
-  storageBucket: "lembrete-inteligente-b6cd1.firebasestorage.app",
-  messagingSenderId: "408773274044",
-  appId: "1:408773274044:android:578bcdeab13c0c102463b9",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCSxt9VNzPwLNDv9tCZpZbnXszgbT72fps",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "lembrete-inteligente-b6cd1.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "lembrete-inteligente-b6cd1",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "lembrete-inteligente-b6cd1.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "408773274044",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:408773274044:android:578bcdeab13c0c102463b9",
 };
 
 // Initialize Firebase once

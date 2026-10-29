@@ -65,6 +65,10 @@ interface RemindersContextType {
   postponeReminder: (id: string, additionalMinutes?: number) => Promise<void>;
   toggleComplete: (id: string) => Promise<void>;
   deleteReminder: (id: string) => Promise<void>;
+  isRinging: boolean;
+  activeAlarmTitle: string | null;
+  stopAlarm: () => void;
+  loginAsDemo: (name: string, email: string, uid?: string) => void;
   triggerTestAlarm: (title?: string) => Promise<void>;
   parseNaturalLanguage: (input: string) => {
     title: string;
@@ -90,6 +94,9 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [vibrationEnabled, setVibrationEnabled] = useState<boolean>(true);
+  const [isRinging, setIsRinging] = useState<boolean>(false);
+  const [activeAlarmTitle, setActiveAlarmTitle] = useState<string | null>(null);
+  const audioInstanceRef = React.useRef<HTMLAudioElement | null>(null);
   const isNative = Capacitor.isNativePlatform();
 
   // Listen to Firebase Auth state
@@ -157,6 +164,47 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         setReminders(JSON.parse(raw));
+      } else {
+        const seedItems: ReminderItem[] = [
+          {
+            id: `rem_demo_1_${user.uid}`,
+            userId: user.uid,
+            title: 'Tomar remédio para pressão',
+            category: 'Saúde',
+            scheduledTime: Date.now() + 3600 * 1000,
+            advanceNoticeMinutes: 10,
+            notificationId: 101,
+            status: 'pending',
+            createdAt: Date.now() - 3600000,
+            recurrence: 'daily'
+          },
+          {
+            id: `rem_demo_2_${user.uid}`,
+            userId: user.uid,
+            title: 'Reunião de alinhamento com equipe',
+            category: 'Trabalho',
+            scheduledTime: Date.now() + 86400 * 1000,
+            advanceNoticeMinutes: 15,
+            notificationId: 102,
+            status: 'pending',
+            createdAt: Date.now() - 7200000,
+            recurrence: 'none'
+          },
+          {
+            id: `rem_demo_3_${user.uid}`,
+            userId: user.uid,
+            title: 'Pagar fatura do cartão de crédito',
+            category: 'Finanças',
+            scheduledTime: Date.now() + 172800 * 1000,
+            advanceNoticeMinutes: 30,
+            notificationId: 103,
+            status: 'pending',
+            createdAt: Date.now() - 10800000,
+            recurrence: 'none'
+          }
+        ];
+        setReminders(seedItems);
+        localStorage.setItem(storageKey, JSON.stringify(seedItems));
       }
     } catch (e) {
       console.warn('[Reminders] Erro cache local:', e);
@@ -217,8 +265,21 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     localStorage.setItem('auth_user', JSON.stringify(profile));
   };
 
+  // Auth: Quick Demo Login (Michel / Maya)
+  const loginAsDemo = useCallback((name: string, email: string, uid?: string) => {
+    const defaultUid = uid || (email.toLowerCase().includes('michel') ? 'usr_68dd8a516780b021' : 'CiEoITiFP2PqVjFYzu0HZ3TXBmt2');
+    const profile: UserProfile = {
+      uid: defaultUid,
+      name,
+      email,
+    };
+    setUser(profile);
+    localStorage.setItem('auth_user', JSON.stringify(profile));
+  }, []);
+
   // Auth: Sign Out
   const signOutUser = async () => {
+    stopAlarm();
     await signOut(auth);
     setUser(null);
     setReminders([]);
@@ -335,6 +396,16 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return newItem;
   }, [user, reminders, persistReminders, scheduleNotification]);
 
+  // Stop active ringing alarm
+  const stopAlarm = useCallback(() => {
+    setIsRinging(false);
+    setActiveAlarmTitle(null);
+    if (audioInstanceRef.current) {
+      audioInstanceRef.current.pause();
+      audioInstanceRef.current.currentTime = 0;
+    }
+  }, []);
+
   // Postpone reminder
   const postponeReminder = useCallback(async (id: string, additionalMinutes: number = 10) => {
     if (!user) return;
@@ -364,7 +435,8 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       `Compromisso adiado por ${additionalMinutes} minutos.`,
       newScheduledTime
     );
-  }, [user, reminders, persistReminders, scheduleNotification]);
+    stopAlarm();
+  }, [user, reminders, persistReminders, scheduleNotification, stopAlarm]);
 
   // Toggle complete
   const toggleComplete = useCallback(async (id: string) => {
@@ -419,31 +491,42 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Trigger test alarm
   const triggerTestAlarm = useCallback(async (title = 'Alarme de Alta Prioridade') => {
+    setIsRinging(true);
+    setActiveAlarmTitle(title);
     const testTime = Date.now() + 2000;
     const notifId = 99999;
     await scheduleNotification(
       notifId,
       `🔔 ${title}`,
-      'Disparo de teste imediato no subsistema nativo do Android com som contínuo!',
+      'Disparo de alarme com som contínuo e prioridade máxima!',
       testTime
     );
 
-    // Audio fallback for browser
-    if (soundEnabled && 'AudioContext' in window) {
+    // Audio playback for browser with real audio file or oscillator fallback
+    if (soundEnabled) {
       try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.4);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.8);
-      } catch {}
+        if (!audioInstanceRef.current) {
+          audioInstanceRef.current = new Audio('/alarm_loud.wav');
+        }
+        audioInstanceRef.current.loop = true;
+        audioInstanceRef.current.currentTime = 0;
+        audioInstanceRef.current.play().catch(() => {
+          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.4);
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.8);
+        });
+      } catch (err) {
+        console.warn('Audio playback error:', err);
+      }
     }
   }, [scheduleNotification, soundEnabled]);
 
@@ -635,6 +718,10 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         postponeReminder,
         toggleComplete,
         deleteReminder,
+        isRinging,
+        activeAlarmTitle,
+        stopAlarm,
+        loginAsDemo,
         triggerTestAlarm,
         parseNaturalLanguage,
       }}

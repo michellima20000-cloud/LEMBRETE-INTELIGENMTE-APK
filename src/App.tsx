@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useReminders, ReminderCategory, AdvanceNoticeMinutes } from './context/RemindersContext';
 import {
   Calendar,
   Volume2,
+  VolumeX,
   LogOut,
   Mic,
   Send,
@@ -21,7 +22,13 @@ import {
   UserPlus,
   LogIn,
   User,
-  AlertCircle
+  AlertCircle,
+  Smartphone,
+  Monitor,
+  Wifi,
+  Battery,
+  BellRing,
+  X
 } from 'lucide-react';
 
 export default function App() {
@@ -30,19 +37,36 @@ export default function App() {
     reminders,
     isLoading: isAppLoading,
     soundEnabled,
-    vibrationEnabled,
     setSoundEnabled,
-    setVibrationEnabled,
     signUpWithEmail,
     signInWithEmail,
     signOutUser,
+    loginAsDemo,
     addReminder,
     postponeReminder,
     toggleComplete,
     deleteReminder,
+    isRinging,
+    activeAlarmTitle,
+    stopAlarm,
     triggerTestAlarm,
     parseNaturalLanguage
   } = useReminders();
+
+  // Viewport mode: 'mobile' (smartphone frame) or 'expanded' (full browser)
+  const [viewMode, setViewMode] = useState<'mobile' | 'expanded'>('mobile');
+
+  // Clock in Android Status Bar
+  const [currentTimeStr, setCurrentTimeStr] = useState<string>('09:41');
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTimeStr(now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auth Form State
   const [authTab, setAuthTab] = useState<'entrar' | 'cadastrar'>('entrar');
@@ -52,6 +76,9 @@ export default function App() {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
+
+  // User Switch Dialog
+  const [showUserSwitchDialog, setShowUserSwitchDialog] = useState<boolean>(false);
 
   // Command card state
   const [commandText, setCommandText] = useState<string>('');
@@ -215,56 +242,90 @@ export default function App() {
     Todos: reminders.length,
   };
 
-  // Render Login / Register Screen when user is not authenticated
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-[#080C1B] flex flex-col justify-between p-4 md:p-8 text-slate-100">
-        {/* Top Header */}
-        <header className="flex justify-between items-center max-w-xl mx-auto w-full">
-          <div className="flex items-center space-x-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-400 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-              <Brain className="w-5 h-5 text-white" />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight">
-              Lembrete <span className="text-indigo-400">Inteligente</span>
-            </h1>
-          </div>
-        </header>
-
-        {/* Login / Cadastro Card */}
-        <div className="max-w-md w-full mx-auto my-8 bg-[#121933] border border-[#1E294B] rounded-3xl p-6 md:p-8 shadow-2xl relative">
-          <div className="flex flex-col items-center text-center">
-            {/* Glowing Brain Icon */}
-            <div className="relative mb-4">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/40">
-                <Brain className="w-11 h-11 text-white" />
+  // Main UI Content inside device or full screen
+  const renderAppContent = () => {
+    if (!user) {
+      return (
+        <div className="flex-1 flex flex-col justify-between p-4 md:p-6 text-slate-100 overflow-y-auto">
+          {/* Header */}
+          <div className="flex flex-col items-center text-center mt-3">
+            {/* Brain Logo */}
+            <div className="relative mb-3">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                <Brain className="w-9 h-9 text-white" />
               </div>
-              <div className="absolute top-1.5 right-1.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-[#121933]" />
+              <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#121933]" />
             </div>
 
-            <h2 className="text-2xl font-bold tracking-tight">
+            <h2 className="text-xl font-bold tracking-tight">
               Lembrete <span className="text-indigo-400">Inteligente</span>
             </h2>
-            <p className="text-sm text-slate-400 mt-1 mb-6">
+            <p className="text-xs text-slate-400 mt-1 mb-4">
               {authTab === 'entrar'
-                ? 'Entre com seu e-mail e senha para acessar'
-                : 'Crie seu cadastro gratuito para salvar seus lembretes'}
+                ? 'Entre com sua conta para acessar seus alarmes'
+                : 'Crie seu cadastro para sincronizar seus compromissos'}
             </p>
 
+            {/* Quick Demo Access (1-Click) */}
+            <div className="w-full bg-[#161F3D] border border-[#2B3968] rounded-2xl p-3 mb-4 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center">
+                  <Sparkles className="w-3 h-3 text-amber-400 mr-1" />
+                  Acesso Rápido de Demonstração
+                </span>
+                <span className="text-[10px] text-slate-400">Sem senha</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    loginAsDemo('Michel Lima', 'michel.lima20000@gmail.com', 'usr_68dd8a516780b021');
+                    showToast('Conectado como Michel Lima!');
+                  }}
+                  className="flex items-center space-x-1.5 p-2 bg-[#1E2B54] hover:bg-indigo-600 rounded-xl text-xs font-semibold text-white transition text-left border border-[#2D3F75]"
+                >
+                  <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                    M
+                  </div>
+                  <div className="truncate">
+                    <p className="font-bold truncate text-[11px]">Michel Lima</p>
+                    <p className="text-[9px] text-slate-300 truncate">Admin / Conta 1</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    loginAsDemo('Maya Lima', 'maya.lima@gmail.com', 'CiEoITiFP2PqVjFYzu0HZ3TXBmt2');
+                    showToast('Conectada como Maya Lima!');
+                  }}
+                  className="flex items-center space-x-1.5 p-2 bg-[#1E2B54] hover:bg-purple-600 rounded-xl text-xs font-semibold text-white transition text-left border border-[#2D3F75]"
+                >
+                  <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                    M
+                  </div>
+                  <div className="truncate">
+                    <p className="font-bold truncate text-[11px]">Maya Lima</p>
+                    <p className="text-[9px] text-slate-300 truncate">Usuária / Conta 2</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             {/* Tab Selector: Entrar vs Cadastrar */}
-            <div className="grid grid-cols-2 w-full p-1 bg-[#0B1021] rounded-xl mb-6">
+            <div className="grid grid-cols-2 w-full p-1 bg-[#0B1021] rounded-xl mb-4 border border-[#1C2648]">
               <button
                 type="button"
                 onClick={() => {
                   setAuthTab('entrar');
                   setAuthError(null);
                 }}
-                className={`flex items-center justify-center space-x-2 py-2 rounded-lg text-xs font-semibold transition ${
+                className={`flex items-center justify-center space-x-1.5 py-1.5 rounded-lg text-xs font-semibold transition ${
                   authTab === 'entrar' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>Entrar</span>
+                <span>Entrar com E-mail</span>
               </button>
               <button
                 type="button"
@@ -272,7 +333,7 @@ export default function App() {
                   setAuthTab('cadastrar');
                   setAuthError(null);
                 }}
-                className={`flex items-center justify-center space-x-2 py-2 rounded-lg text-xs font-semibold transition ${
+                className={`flex items-center justify-center space-x-1.5 py-1.5 rounded-lg text-xs font-semibold transition ${
                   authTab === 'cadastrar' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -283,53 +344,50 @@ export default function App() {
 
             {/* Error Message Box */}
             {authError && (
-              <div className="w-full mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2 text-left">
+              <div className="w-full mb-3 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2 text-left">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />
                 <span>{authError}</span>
               </div>
             )}
 
             {/* Form */}
-            <form onSubmit={handleAuthSubmit} className="w-full space-y-4 text-left">
-              {/* Name Field (Only in Cadastrar) */}
+            <form onSubmit={handleAuthSubmit} className="w-full space-y-3 text-left">
               {authTab === 'cadastrar' && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Seu Nome Completo</label>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">Seu Nome Completo</label>
                   <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
                       required
                       placeholder="Ex: Carlos Silva"
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 bg-[#17203E] border border-[#26335C] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-500"
+                      className="w-full pl-9 pr-3 py-2 bg-[#17203E] border border-[#26335C] rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-500"
                     />
                   </div>
                 </div>
               )}
 
-              {/* Email Field */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">E-mail</label>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1">E-mail</label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="email"
                     required
                     placeholder="seu.email@exemplo.com"
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-[#17203E] border border-[#26335C] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-500"
+                    className="w-full pl-9 pr-3 py-2 bg-[#17203E] border border-[#26335C] rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-500"
                   />
                 </div>
               </div>
 
-              {/* Password Field */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">Senha</label>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1">Senha</label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
@@ -337,425 +395,608 @@ export default function App() {
                     placeholder="Mínimo 6 caracteres"
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 bg-[#17203E] border border-[#26335C] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-500"
+                    className="w-full pl-9 pr-9 py-2 bg-[#17203E] border border-[#26335C] rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-200"
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  {authTab === 'cadastrar'
-                    ? 'A senha deve conter no mínimo 6 caracteres.'
-                    : 'Toque no olho para visualizar a senha antes de enviar.'}
-                </p>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl font-bold text-sm text-white transition flex items-center justify-center space-x-2 shadow-lg shadow-indigo-600/30 mt-2"
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl font-bold text-xs text-white transition flex items-center justify-center space-x-2 shadow-lg shadow-indigo-600/30 mt-2"
               >
                 {authLoading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    {authTab === 'entrar' ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-                    <span>{authTab === 'entrar' ? 'Entrar na Conta' : 'Criar Conta no Firebase'}</span>
+                    {authTab === 'entrar' ? <LogIn className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
+                    <span>{authTab === 'entrar' ? 'Entrar com Senha' : 'Criar Conta no Firebase'}</span>
                   </>
                 )}
               </button>
             </form>
+          </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setAuthTab(authTab === 'entrar' ? 'cadastrar' : 'entrar');
-                setAuthError(null);
-              }}
-              className="text-xs text-indigo-400 mt-5 hover:underline"
-            >
-              {authTab === 'entrar'
-                ? 'Não tem conta? Cadastrar-se agora'
-                : 'Já tem uma conta? Fazer login'}
-            </button>
+          <div className="text-center text-[10px] text-slate-500 py-3 mt-4">
+            • Lembrete Inteligente • Agenda de Lembretes e Compromissos
           </div>
         </div>
+      );
+    }
 
-        {/* Footer */}
-        <footer className="text-center text-xs text-slate-500">
-          • Lembrete Inteligente • Agenda de Lembretes e Compromissos
-        </footer>
-      </div>
-    );
-  }
-
-  // Dashboard Screen (Authenticated user)
-  return (
-    <div className="min-h-screen bg-[#090D1C] text-slate-100 flex flex-col justify-between">
-      {/* Top App Header */}
-      <header className="border-b border-[#1A2344] bg-[#090D1C]/90 backdrop-blur sticky top-0 z-40 px-4 py-3">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          {/* Logo */}
-          <div className="flex items-center space-x-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center shadow-md shadow-indigo-500/20 flex-shrink-0">
-              <Calendar className="w-4 h-4 text-white" />
+    return (
+      <div className="flex-1 flex flex-col justify-between overflow-y-auto">
+        {/* App Bar inside the mobile viewport */}
+        <div className="px-4 py-2.5 bg-[#090D1C]/95 backdrop-blur border-b border-[#1A2344] sticky top-0 z-30 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center shadow-md shadow-indigo-500/20 flex-shrink-0">
+              <Calendar className="w-3.5 h-3.5 text-white" />
             </div>
-            <h1 className="text-base md:text-lg font-bold tracking-tight whitespace-nowrap">
+            <span className="text-sm font-bold tracking-tight text-white">
               Lembrete <span className="text-indigo-400">Inteligente</span>
-            </h1>
+            </span>
           </div>
 
-          {/* User Badge & Logout */}
-          <div className="flex items-center space-x-2 flex-shrink-0">
-            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[#1B2344] border border-[#2B3968] text-xs">
-              <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white text-[10px]">
+          <div className="flex items-center space-x-1.5">
+            {/* Audio Toggle */}
+            <button
+              onClick={() => {
+                setSoundEnabled(!soundEnabled);
+                showToast(soundEnabled ? 'Som desativado' : 'Som ativado');
+              }}
+              className={`p-1.5 rounded-lg border transition ${
+                soundEnabled
+                  ? 'bg-indigo-950/60 border-indigo-500/40 text-indigo-400'
+                  : 'bg-slate-900 border-slate-800 text-slate-500'
+              }`}
+              title={soundEnabled ? 'Som ativado' : 'Som mudo'}
+            >
+              {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            </button>
+
+            {/* User Badge Clickable */}
+            <button
+              onClick={() => setShowUserSwitchDialog(true)}
+              className="flex items-center space-x-1.5 px-2 py-1 rounded-xl bg-[#1B2344] border border-[#2B3968] text-xs hover:border-indigo-400 transition"
+              title="Alternar usuário"
+            >
+              <div className="w-4 h-4 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white text-[9px]">
                 {user.name.charAt(0).toUpperCase()}
               </div>
-              <span className="font-semibold text-white max-w-[120px] truncate">{user.name}</span>
-            </div>
+              <span className="font-semibold text-white max-w-[80px] truncate text-[11px]">{user.name.split(' ')[0]}</span>
+            </button>
 
+            {/* Logout */}
             <button
               onClick={async () => {
                 await signOutUser();
                 showToast('Desconectado com sucesso');
               }}
-              className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition"
-              title="Sair da conta"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 transition"
+              title="Sair"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Main Area */}
+        <div className="p-3.5 space-y-3.5 flex-1">
+          {/* Active Ringing Alarm Alert Banner */}
+          {isRinging && (
+            <div className="bg-gradient-to-r from-rose-900/90 via-amber-900/90 to-rose-900/90 border-2 border-rose-500 rounded-2xl p-3 shadow-xl shadow-rose-950/60 animate-pulse text-white">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center animate-bounce">
+                    <BellRing className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-rose-200">
+                      🚨 Alarme Disparando Agora!
+                    </h3>
+                    <p className="text-sm font-extrabold text-white">
+                      {activeAlarmTitle || 'Alarme Programado'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-rose-700/50">
+                <button
+                  onClick={() => {
+                    stopAlarm();
+                    showToast('Alarme desligado');
+                  }}
+                  className="py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md transition"
+                >
+                  ⏹️ Parar Alarme
+                </button>
+                <button
+                  onClick={() => {
+                    stopAlarm();
+                    showToast('Alarme adiado por 10 minutos');
+                  }}
+                  className="py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-md transition"
+                >
+                  ⏰ Adiar (+10m)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Natural Language Command Card */}
+          <div className="bg-[#121933] border border-[#1F2A52] rounded-2xl p-3.5 shadow-xl">
+            <textarea
+              rows={2}
+              value={commandText}
+              onChange={(e) => setCommandText(e.target.value)}
+              placeholder='Fale ou digite: "Hoje às 15h tomar remédio" ou "Pagar boleto amanhã às 10h"...'
+              className="w-full bg-transparent resize-none text-xs md:text-sm text-white placeholder-slate-500 focus:outline-none"
+            />
+
+            {/* Notice options & Mic / Schedule Buttons */}
+            <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-[#1B254A]">
+              <div className="flex items-center space-x-1 overflow-x-auto pb-1 text-[11px]">
+                <span className="text-slate-400 font-medium flex items-center mr-0.5 whitespace-nowrap">
+                  <Clock className="w-3 h-3 mr-0.5" />
+                  Avisar:
+                </span>
+                {(
+                  [
+                    [0, 'No horário'],
+                    [5, '5m'],
+                    [10, '10m'],
+                    [15, '15m'],
+                    [30, '30m'],
+                  ] as const
+                ).map(([min, label]) => (
+                  <button
+                    key={min}
+                    type="button"
+                    onClick={() => setAdvanceNotice(min as AdvanceNoticeMinutes)}
+                    className={`px-2 py-0.5 rounded-md transition whitespace-nowrap ${
+                      advanceNotice === min
+                        ? 'bg-indigo-600 text-white font-semibold'
+                        : 'bg-[#161F3D] text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center space-x-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={handleMicClick}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition ${
+                    isListening
+                      ? 'bg-rose-500 text-white animate-pulse'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30'
+                  }`}
+                  title="Microfone (comando por voz)"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSchedule}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/20"
+                >
+                  <span>Agendar</span>
+                  <Send className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+
+            {/* Prompt Example Chips */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto pt-2 mt-2 border-t border-[#17203E] text-[10px]">
+              <span className="text-slate-400 font-medium flex items-center whitespace-nowrap">
+                <Sparkles className="w-3 h-3 text-amber-400 mr-1" />
+                Exemplos:
+              </span>
+              {[
+                'Tomar remédio hoje às 16h',
+                'Reunião amanhã às 09h',
+                'Pagar boleto amanhã às 11h',
+                'Treino hoje às 19h',
+              ].map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  onClick={() => setCommandText(ex)}
+                  className="px-2 py-0.5 rounded-lg bg-[#172242] border border-[#26335C] text-slate-300 hover:text-white whitespace-nowrap hover:border-indigo-500 transition"
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Test Alarm Button (Same as Android AlarmManager test) */}
+          <div className="bg-[#161E3D] border border-[#2E3A68] rounded-xl p-2.5 flex items-center justify-between text-xs">
+            <div className="flex items-center space-x-2">
+              <Play className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              <span className="text-[11px] font-semibold text-slate-200">
+                Testar Alarme Nativo Alto (com som)
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                triggerTestAlarm('Alarme de Teste Imediato');
+                showToast('Disparando alarme!');
+              }}
+              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold transition shadow"
+            >
+              Disparar Agora
+            </button>
+          </div>
+
+          {/* Section: Cronograma & Agenda */}
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-xs font-bold tracking-tight text-white flex items-center">
+                <Clock className="w-3.5 h-3.5 mr-1 text-indigo-400" />
+                Cronograma & Lembretes
+              </h3>
+              <span className="px-2 py-0.5 rounded-full bg-[#1E2648] text-indigo-300 text-[10px] font-medium">
+                {user.name.split(' ')[0]} ({counts.Todos})
+              </span>
+            </div>
+
+            {/* Search */}
+            <div className="relative mb-2">
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                placeholder="Buscar compromisso..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-[#121933] border border-[#26335C] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+              />
+            </div>
+
+            {/* Status Tabs */}
+            <div className="grid grid-cols-4 bg-[#121933] p-1 rounded-xl gap-1 text-[11px] mb-3">
+              {(['Pendentes', 'Adiados', 'Concluídos', 'Todos'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setStatusFilter(tab)}
+                  className={`py-1 rounded-lg font-medium text-center transition ${
+                    statusFilter === tab
+                      ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {tab} ({counts[tab]})
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Reminders List */}
+          {filteredReminders.length === 0 ? (
+            <div className="bg-[#10162E] border border-[#1A2242] rounded-2xl py-8 px-4 flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-full bg-[#1D2447] flex items-center justify-center mb-2">
+                <Clock className="w-6 h-6 text-indigo-400" />
+              </div>
+              <h4 className="text-xs font-bold text-white mb-0.5">
+                Nenhum lembrete nesta lista
+              </h4>
+              <p className="text-[11px] text-slate-400 max-w-xs">
+                Fale ou digite no campo acima para criar novos alarmes.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2.5 pb-3">
+              {filteredReminders.map((reminder) => {
+                const isCompleted = reminder.status === 'completed';
+                const isPostponed = reminder.status === 'postponed';
+                const dateStr = new Date(reminder.scheduledTime).toLocaleString('pt-BR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+
+                const categoryColors: Record<string, string> = {
+                  Saúde: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                  Trabalho: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40',
+                  Finanças: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+                  Estudos: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40',
+                  Pessoal: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
+                };
+
+                return (
+                  <div
+                    key={reminder.id}
+                    className={`bg-[#131A36] border rounded-xl p-3 transition ${
+                      isCompleted ? 'border-[#1B2642] opacity-70' : 'border-[#222F56]'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="flex items-center space-x-1.5">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                            categoryColors[reminder.category] || categoryColors.Pessoal
+                          }`}
+                        >
+                          {reminder.category}
+                        </span>
+                        {isPostponed && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/20 text-amber-300">
+                            Adiado
+                          </span>
+                        )}
+                        {isCompleted && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/20 text-emerald-300">
+                            Concluído
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          deleteReminder(reminder.id);
+                          showToast('Lembrete excluído');
+                        }}
+                        className="text-slate-500 hover:text-rose-400 transition"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <h4
+                      className={`text-xs md:text-sm font-semibold mt-1 ${
+                        isCompleted ? 'line-through text-slate-500' : 'text-white'
+                      }`}
+                    >
+                      {reminder.title}
+                    </h4>
+
+                    <div className="flex items-center space-x-2 text-[11px] text-indigo-400 mt-1 mb-2">
+                      <Clock className="w-3 h-3" />
+                      <span>{dateStr}</span>
+                      {reminder.advanceNoticeMinutes > 0 && (
+                        <span className="text-slate-400">• Avisar {reminder.advanceNoticeMinutes}m antes</span>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex justify-between items-center pt-2 border-t border-[#1C254B] text-[11px]">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => {
+                            speakText(`Lembrete: ${reminder.title}. Programado para ${dateStr}`);
+                            showToast('Reproduzindo em áudio...');
+                          }}
+                          className="flex items-center space-x-0.5 text-indigo-400 hover:text-indigo-300 transition"
+                        >
+                          <Volume2 className="w-3 h-3" />
+                          <span>Ouvir</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            triggerTestAlarm(reminder.title);
+                            showToast(`Disparando som para: ${reminder.title}`);
+                          }}
+                          className="flex items-center space-x-0.5 text-cyan-400 hover:text-cyan-300 transition"
+                        >
+                          <Play className="w-3 h-3" />
+                          <span>Alarme</span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5">
+                        {!isCompleted && (
+                          <button
+                            onClick={() => {
+                              postponeReminder(reminder.id, 10);
+                              showToast('Adiado por 10 minutos');
+                            }}
+                            className="px-2 py-0.5 rounded-lg bg-[#1E284A] text-amber-400 hover:bg-[#283663] font-semibold transition"
+                          >
+                            +10m
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => {
+                            toggleComplete(reminder.id);
+                            showToast(isCompleted ? 'Reativado como pendente' : 'Concluído!');
+                          }}
+                          className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-lg font-bold transition ${
+                            isCompleted
+                              ? 'bg-[#1E284A] text-slate-300 hover:bg-[#283663]'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <>
+                              <RotateCcw className="w-2.5 h-2.5" />
+                              <span>Reativar</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-2.5 h-2.5" />
+                              <span>Concluir</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* User Switch Modal */}
+        {showUserSwitchDialog && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-[#121933] border border-[#2B3968] rounded-2xl max-w-xs w-full p-4 shadow-2xl">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Alternar Conta / Usuário
+                </h4>
+                <button
+                  onClick={() => setShowUserSwitchDialog(false)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <button
+                  onClick={() => {
+                    loginAsDemo('Michel Lima', 'michel.lima20000@gmail.com', 'usr_68dd8a516780b021');
+                    setShowUserSwitchDialog(false);
+                    showToast('Alternado para Michel Lima');
+                  }}
+                  className={`w-full p-2.5 rounded-xl border flex items-center space-x-2 transition ${
+                    user.email.includes('michel')
+                      ? 'bg-indigo-600/30 border-indigo-500 text-white'
+                      : 'bg-[#182346] border-[#2B3968] text-slate-300 hover:bg-[#202E5C]'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white text-xs">
+                    M
+                  </div>
+                  <div className="text-left truncate">
+                    <p className="font-bold text-xs">Michel Lima</p>
+                    <p className="text-[10px] text-slate-400">michel.lima20000@gmail.com</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    loginAsDemo('Maya Lima', 'maya.lima@gmail.com', 'CiEoITiFP2PqVjFYzu0HZ3TXBmt2');
+                    setShowUserSwitchDialog(false);
+                    showToast('Alternada para Maya Lima');
+                  }}
+                  className={`w-full p-2.5 rounded-xl border flex items-center space-x-2 transition ${
+                    user.email.includes('maya')
+                      ? 'bg-purple-600/30 border-purple-500 text-white'
+                      : 'bg-[#182346] border-[#2B3968] text-slate-300 hover:bg-[#202E5C]'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center font-bold text-white text-xs">
+                    M
+                  </div>
+                  <div className="text-left truncate">
+                    <p className="font-bold text-xs">Maya Lima</p>
+                    <p className="text-[10px] text-slate-400">maya.lima@gmail.com</p>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={async () => {
+                  setShowUserSwitchDialog(false);
+                  await signOutUser();
+                  showToast('Desconectado');
+                }}
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-rose-300 rounded-xl text-xs font-semibold transition"
+              >
+                Sair da Conta Atual
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-[#060914] text-slate-100 flex flex-col items-center justify-between">
+      {/* Top Controller Bar: Viewport Switcher */}
+      <header className="w-full bg-[#0B1024] border-b border-[#1A2346] px-4 py-2.5 z-40 sticky top-0 shadow-md">
+        <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center space-x-2">
+            <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
+              <Calendar className="w-3.5 h-3.5" />
+            </div>
+            <span className="text-xs font-bold text-white">
+              Lembrete Inteligente <span className="text-indigo-400 font-normal">| Visualizador do App</span>
+            </span>
+          </div>
+
+          {/* Mode Switcher */}
+          <div className="flex items-center space-x-1 bg-[#131B38] border border-[#23305E] p-1 rounded-xl">
+            <button
+              onClick={() => setViewMode('mobile')}
+              className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                viewMode === 'mobile'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>📱 Modo Celular (App Nativo)</span>
+            </button>
+            <button
+              onClick={() => setViewMode('expanded')}
+              className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                viewMode === 'expanded'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Monitor className="w-3.5 h-3.5" />
+              <span>💻 Modo Expandido</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-4xl mx-auto w-full flex-1 px-4 py-5 space-y-5">
-        {/* Natural Language Command Card */}
-        <div className="bg-[#121933] border border-[#1F2A52] rounded-2xl p-4 md:p-5 shadow-xl">
-          <textarea
-            rows={2}
-            value={commandText}
-            onChange={(e) => setCommandText(e.target.value)}
-            placeholder='Fale no microfone ou digite: "Hoje às 15h tomar remédio" ou "Pagar conta amanhã às 10h"...'
-            className="w-full bg-transparent resize-none text-sm md:text-base text-white placeholder-slate-500 focus:outline-none"
-          />
-
-          {/* Avisar options and Action buttons */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#1B254A]">
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs">
-              <span className="text-slate-400 font-medium flex items-center mr-1">
-                <Clock className="w-3.5 h-3.5 mr-1" />
-                Avisar:
-              </span>
-              {(
-                [
-                  [0, 'No horário'],
-                  [5, '5m antes'],
-                  [10, '10m antes'],
-                  [15, '15m antes'],
-                  [30, '30m antes'],
-                ] as const
-              ).map(([min, label]) => (
-                <button
-                  key={min}
-                  type="button"
-                  onClick={() => setAdvanceNotice(min as AdvanceNoticeMinutes)}
-                  className={`px-2.5 py-1 rounded-lg transition ${
-                    advanceNotice === min
-                      ? 'bg-indigo-600 text-white font-semibold'
-                      : 'bg-[#161F3D] text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={handleMicClick}
-                className={`w-9 h-9 rounded-full flex items-center justify-center transition ${
-                  isListening
-                    ? 'bg-rose-500 text-white animate-pulse'
-                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30'
-                }`}
-                title="Microfone do sistema (agendamento automático)"
-              >
-                <Mic className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSchedule}
-                className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/20"
-              >
-                <span>Agendar</span>
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Exemplos chips */}
-          <div className="flex items-center space-x-2 overflow-x-auto pt-3 mt-3 border-t border-[#17203E] text-xs">
-            <span className="text-slate-400 font-medium flex items-center whitespace-nowrap">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400 mr-1" />
-              Exemplos:
-            </span>
-            {[
-              'Tomar remédio todo dia às 08h',
-              'Reunião toda segunda às 09h',
-              'Pagar boleto amanhã às 14h',
-              'Alongamento de segunda a sexta às 16h',
-            ].map((ex) => (
-              <button
-                key={ex}
-                type="button"
-                onClick={() => setCommandText(ex)}
-                className="px-2.5 py-1 rounded-xl bg-[#172242] border border-[#26335C] text-slate-300 hover:text-white whitespace-nowrap hover:border-indigo-500 transition"
-              >
-                {ex}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Quick Instant Test Alarm Button */}
-        <div className="bg-[#161E3D] border border-[#2E3A68] rounded-xl p-3 flex items-center justify-between text-xs">
-          <div className="flex items-center space-x-2">
-            <Play className="w-4 h-4 text-amber-400" />
-            <span className="font-semibold text-slate-200">
-              Testar Alarme Nativo no AlarmManager / LocalNotifications (2s)
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              triggerTestAlarm();
-              showToast('Alarme disparará em 2 segundos com som e vibração!');
-            }}
-            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition"
-          >
-            Disparar Agora
-          </button>
-        </div>
-
-        {/* Section Header: Cronograma & Agenda */}
-        <div>
-          <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
-            <div className="flex items-center space-x-2">
-              <h2 className="text-lg font-bold tracking-tight text-white">Cronograma & Agenda</h2>
-              <span className="px-2 py-0.5 rounded-full bg-[#1E2648] text-indigo-300 text-[10px] font-medium">
-                Ordem Cronológica
-              </span>
-            </div>
-          </div>
-          <p className="text-xs text-slate-400 mb-3">
-            Lembretes sincronizados no Firebase para: <span className="text-indigo-400 font-semibold">{user.name}</span> ({user.email})
-          </p>
-
-          {/* Search bar */}
-          <div className="relative mb-3">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-            <input
-              type="text"
-              placeholder="Buscar compromisso..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-[#121933] border border-[#26335C] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
-            />
-          </div>
-        </div>
-
-        {/* Status Tabs */}
-        <div className="grid grid-cols-4 bg-[#121933] p-1 rounded-xl gap-1 text-xs">
-          {(['Pendentes', 'Adiados', 'Concluídos', 'Todos'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setStatusFilter(tab)}
-              className={`py-2 rounded-lg font-medium text-center transition ${
-                statusFilter === tab
-                  ? 'bg-indigo-600 text-white font-bold shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {tab} ({counts[tab]})
-            </button>
-          ))}
-        </div>
-
-        {/* Reminders List or Empty State */}
-        {filteredReminders.length === 0 ? (
-          <div className="bg-[#10162E] border border-[#1A2242] rounded-2xl py-12 px-6 flex flex-col items-center text-center">
-            {/* Alarm Clock Illustration */}
-            <div className="w-16 h-16 rounded-full bg-[#1D2447] flex items-center justify-center mb-4">
-              <div className="relative">
-                <div className="w-9 h-9 rounded-full bg-rose-500/20 border-2 border-rose-500 flex items-center justify-center">
-                  <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-rose-400 rotate-45 transform" />
-                </div>
-                <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-rose-500 rounded-full" />
-                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full" />
+      {/* Main Container Area */}
+      <main className="w-full flex-1 flex items-center justify-center p-2 md:p-6 overflow-hidden">
+        {viewMode === 'mobile' ? (
+          /* Smartphone Frame */
+          <div className="w-full max-w-[400px] h-[820px] max-h-[92vh] bg-[#090D1C] border-[6px] border-[#202946] rounded-[44px] shadow-2xl shadow-indigo-950/80 flex flex-col relative overflow-hidden ring-1 ring-white/10">
+            {/* Top Android Status Bar */}
+            <div className="w-full bg-[#090D1C] pt-2 px-6 pb-1 flex items-center justify-between text-[11px] text-slate-300 font-semibold select-none z-30">
+              <span>{currentTimeStr}</span>
+              {/* Front Camera Notch / Punch Hole */}
+              <div className="w-3.5 h-3.5 rounded-full bg-black border border-slate-800 flex items-center justify-center">
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <Wifi className="w-3.5 h-3.5" />
+                <span className="text-[10px]">5G</span>
+                <Battery className="w-3.5 h-3.5" />
               </div>
             </div>
-            <h3 className="text-base font-bold text-white mb-1">
-              Nenhum lembrete nesta visualização
-            </h3>
-            <p className="text-xs text-slate-400 max-w-sm">
-              Tudo em dia! Diga ou digite um comando acima para agendar novas tarefas.
-            </p>
+
+            {/* Smartphone Inner Screen Content */}
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+              {renderAppContent()}
+            </div>
+
+            {/* Bottom Android Home Navigation Bar */}
+            <div className="w-full bg-[#090D1C] pb-2 pt-1 flex justify-center z-30">
+              <div className="w-32 h-1 bg-slate-600/80 rounded-full" />
+            </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filteredReminders.map((reminder) => {
-              const isCompleted = reminder.status === 'completed';
-              const isPostponed = reminder.status === 'postponed';
-              const dateStr = new Date(reminder.scheduledTime).toLocaleString('pt-BR', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              });
-
-              const categoryColors: Record<string, string> = {
-                Saúde: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
-                Trabalho: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40',
-                Finanças: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
-                Estudos: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40',
-                Pessoal: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
-              };
-
-              return (
-                <div
-                  key={reminder.id}
-                  className={`bg-[#131A36] border rounded-2xl p-4 transition ${
-                    isCompleted ? 'border-[#1B2642] opacity-70' : 'border-[#222F56]'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center space-x-2">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                          categoryColors[reminder.category] || categoryColors.Pessoal
-                        }`}
-                      >
-                        {reminder.category}
-                      </span>
-                      {isPostponed && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300">
-                          Adiado
-                        </span>
-                      )}
-                      {isCompleted && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-300">
-                          Concluído
-                        </span>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        deleteReminder(reminder.id);
-                        showToast('Lembrete excluído');
-                      }}
-                      className="text-slate-500 hover:text-rose-400 transition"
-                      title="Excluir"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <h4 className={`text-sm md:text-base font-semibold ${isCompleted ? 'line-through text-slate-500' : 'text-white'}`}>
-                    {reminder.title}
-                  </h4>
-
-                  <div className="flex items-center space-x-2 text-xs text-indigo-400 mt-2 mb-3">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{dateStr}</span>
-                    {reminder.advanceNoticeMinutes > 0 && (
-                      <span className="text-slate-400">• Avisar {reminder.advanceNoticeMinutes}m antes</span>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex justify-between items-center pt-2 border-t border-[#1C254B] text-xs">
-                    <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => {
-                          speakText(`Lembrete: ${reminder.title}. Programado para ${dateStr}`);
-                          showToast('Reproduzindo em áudio...');
-                        }}
-                        className="flex items-center space-x-1 text-indigo-400 hover:text-indigo-300 transition"
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span>Ouvir</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          triggerTestAlarm(reminder.title);
-                          showToast(`Disparando som de teste para: ${reminder.title}`);
-                        }}
-                        className="flex items-center space-x-1 text-cyan-400 hover:text-cyan-300 transition"
-                      >
-                        <Play className="w-3.5 h-3.5" />
-                        <span>Testar Alarme</span>
-                      </button>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      {!isCompleted && (
-                        <button
-                          onClick={() => {
-                            postponeReminder(reminder.id, 10);
-                            showToast('Compromisso adiado por 10 minutos');
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-[#1E284A] text-amber-400 hover:bg-[#283663] font-semibold transition"
-                        >
-                          Adiar (+10m)
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => {
-                          toggleComplete(reminder.id);
-                          showToast(isCompleted ? 'Reativado como pendente' : 'Concluído com sucesso!');
-                        }}
-                        className={`flex items-center space-x-1 px-3 py-1 rounded-lg font-bold transition ${
-                          isCompleted
-                            ? 'bg-[#1E284A] text-slate-300 hover:bg-[#283663]'
-                            : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                        }`}
-                      >
-                        {isCompleted ? (
-                          <>
-                            <RotateCcw className="w-3 h-3" />
-                            <span>Reativar</span>
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-3 h-3" />
-                            <span>Concluir</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          /* Expanded Full Width View */
+          <div className="w-full max-w-4xl h-full flex flex-col bg-[#090D1C] border border-[#1A2346] rounded-2xl shadow-xl overflow-hidden min-h-[750px]">
+            {renderAppContent()}
           </div>
         )}
       </main>
-
-      {/* Footer */}
-      <footer className="text-center text-xs text-slate-500 py-4 border-t border-[#151D38]">
-        • Lembrete Inteligente • Agenda de Lembretes e Compromissos
-      </footer>
 
       {/* Toast Notification */}
       {toastMessage && (
