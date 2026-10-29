@@ -3,12 +3,9 @@ package com.example.data
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.model.Reminder
-import com.example.model.USER_MAYA
-import com.example.model.USER_MICHEL
 import com.example.model.UserProfile
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.Calendar
 
 class ReminderRepository private constructor(private val context: Context) {
 
@@ -26,21 +23,31 @@ class ReminderRepository private constructor(private val context: Context) {
         }
     }
 
-    fun getCurrentUser(): UserProfile {
-        val uid = prefs.getString("current_user_uid", USER_MICHEL.uid) ?: USER_MICHEL.uid
-        return if (uid == USER_MAYA.uid) USER_MAYA else USER_MICHEL
+    fun getCurrentUser(): UserProfile? {
+        val uid = prefs.getString("current_user_uid", null) ?: return null
+        val name = prefs.getString("current_user_name", "Usuário") ?: "Usuário"
+        val email = prefs.getString("current_user_email", "") ?: ""
+        return UserProfile(uid = uid, name = name, email = email)
     }
 
-    fun setCurrentUser(user: UserProfile) {
-        prefs.edit().putString("current_user_uid", user.uid).apply()
+    fun setCurrentUser(user: UserProfile?) {
+        val editor = prefs.edit()
+        if (user != null) {
+            editor.putString("current_user_uid", user.uid)
+            editor.putString("current_user_name", user.name)
+            editor.putString("current_user_email", user.email)
+        } else {
+            editor.remove("current_user_uid")
+            editor.remove("current_user_name")
+            editor.remove("current_user_email")
+        }
+        editor.apply()
     }
 
     fun getRemindersForUser(userId: String): List<Reminder> {
         val raw = prefs.getString("reminders_$userId", null)
         if (raw.isNullOrEmpty()) {
-            val initial = getInitialRemindersFor(userId)
-            saveRemindersForUser(userId, initial)
-            return initial
+            return emptyList()
         }
         val list = mutableListOf<Reminder>()
         try {
@@ -110,97 +117,7 @@ class ReminderRepository private constructor(private val context: Context) {
     }
 
     fun getAllPendingReminders(): List<Reminder> {
-        val users = listOf(USER_MICHEL.uid, USER_MAYA.uid)
-        val all = mutableListOf<Reminder>()
-        for (uid in users) {
-            all.addAll(getRemindersForUser(uid).filter { it.status == "pending" })
-        }
-        return all
-    }
-
-    private fun getInitialRemindersFor(userId: String): List<Reminder> {
-        val now = Calendar.getInstance()
-        val list = mutableListOf<Reminder>()
-
-        if (userId == USER_MICHEL.uid) {
-            val cal1 = now.clone() as Calendar
-            cal1.add(Calendar.HOUR_OF_DAY, 2)
-            list.add(
-                Reminder(
-                    id = "m1",
-                    userId = userId,
-                    title = "Tomar remédio controlado",
-                    category = "Saúde",
-                    scheduledEpochMs = cal1.timeInMillis,
-                    advanceNoticeMinutes = 5,
-                    status = "pending",
-                    notificationId = 101
-                )
-            )
-
-            val cal2 = now.clone() as Calendar
-            cal2.add(Calendar.DAY_OF_MONTH, 1)
-            cal2.set(Calendar.HOUR_OF_DAY, 14)
-            cal2.set(Calendar.MINUTE, 0)
-            list.add(
-                Reminder(
-                    id = "m2",
-                    userId = userId,
-                    title = "Pagar fatura do cartão de crédito",
-                    category = "Finanças",
-                    scheduledEpochMs = cal2.timeInMillis,
-                    advanceNoticeMinutes = 15,
-                    status = "pending",
-                    notificationId = 102
-                )
-            )
-
-            val cal3 = now.clone() as Calendar
-            cal3.add(Calendar.DAY_OF_MONTH, 2)
-            cal3.set(Calendar.HOUR_OF_DAY, 9)
-            cal3.set(Calendar.MINUTE, 30)
-            list.add(
-                Reminder(
-                    id = "m3",
-                    userId = userId,
-                    title = "Reunião de alinhamento com equipe de TI",
-                    category = "Trabalho",
-                    scheduledEpochMs = cal3.timeInMillis,
-                    advanceNoticeMinutes = 10,
-                    status = "pending",
-                    notificationId = 103
-                )
-            )
-        } else {
-            val cal1 = now.clone() as Calendar
-            cal1.add(Calendar.HOUR_OF_DAY, 1)
-            list.add(
-                Reminder(
-                    id = "y1",
-                    userId = userId,
-                    title = "Estudar módulo de Arquitetura Android",
-                    category = "Estudos",
-                    scheduledEpochMs = cal1.timeInMillis,
-                    advanceNoticeMinutes = 5,
-                    status = "pending",
-                    notificationId = 201
-                )
-            )
-            val cal2 = now.clone() as Calendar
-            cal2.add(Calendar.HOUR_OF_DAY, 4)
-            list.add(
-                Reminder(
-                    id = "y2",
-                    userId = userId,
-                    title = "Alongamento e pausa ativa",
-                    category = "Saúde",
-                    scheduledEpochMs = cal2.timeInMillis,
-                    advanceNoticeMinutes = 0,
-                    status = "pending",
-                    notificationId = 202
-                )
-            )
-        }
-        return list
+        val currentUser = getCurrentUser() ?: return emptyList()
+        return getRemindersForUser(currentUser.uid).filter { it.status == "pending" }
     }
 }

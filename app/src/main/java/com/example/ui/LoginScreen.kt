@@ -30,16 +30,15 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.model.USER_MAYA
-import com.example.model.USER_MICHEL
-import com.example.ui.theme.*
 
 @Composable
 fun LoginScreen(
     viewModel: ReminderViewModel,
     modifier: Modifier = Modifier
 ) {
-    var email by remember { mutableStateOf("michel.lima123@gmail.com") }
+    val state by viewModel.uiState.collectAsState()
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var activeTab by remember { mutableStateOf("entrar") } // "entrar" or "cadastrar"
@@ -72,7 +71,7 @@ fun LoginScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
@@ -112,32 +111,6 @@ fun LoginScreen(
                         )
                     }
                 }
-
-                // Install App Badge
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0xFF4F46E5),
-                    modifier = Modifier.height(34.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "Instalar App",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
             }
 
             // Main Auth Card
@@ -173,7 +146,6 @@ fun LoginScreen(
                             tint = Color.White,
                             modifier = Modifier.size(42.dp)
                         )
-                        // Online indicator dot
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
@@ -203,60 +175,15 @@ fun LoginScreen(
                     }
 
                     Text(
-                        text = "Entre com sua conta para acessar e sincronizar",
+                        text = if (activeTab == "entrar")
+                            "Entre com seu e-mail e senha para acessar"
+                        else
+                            "Crie sua conta para sincronizar seus lembretes",
                         color = Color(0xFF94A3B8),
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
                     )
-
-                    // Quick User Selector Chips (Michel vs Maya)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Contas isoladas:",
-                            color = Color(0xFF64748B),
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (email.contains("michel")) Color(0xFF4F46E5) else Color(0xFF1A2242),
-                            modifier = Modifier
-                                .clickable {
-                                    email = USER_MICHEL.email
-                                }
-                                .padding(end = 6.dp)
-                        ) {
-                            Text(
-                                text = "Michel",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (email.contains("maya")) Color(0xFF4F46E5) else Color(0xFF1A2242),
-                            modifier = Modifier.clickable {
-                                email = USER_MAYA.email
-                            }
-                        ) {
-                            Text(
-                                text = "Maya",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
 
                     // Tab selector (Entrar / Cadastrar)
                     Row(
@@ -325,6 +252,51 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
+                    // Name input (only on Cadastrar)
+                    if (activeTab == "cadastrar") {
+                        Text(
+                            text = "Seu Nome Completo",
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                        )
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            placeholder = {
+                                Text("Ex: Carlos Silva", color = Color(0xFF64748B), fontSize = 13.sp)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("name_input"),
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = Color(0xFF94A3B8)
+                                )
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF17203E),
+                                unfocusedContainerColor = Color(0xFF17203E),
+                                focusedBorderColor = Color(0xFF6366F1),
+                                unfocusedBorderColor = Color(0xFF26335C),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Next
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+
                     // Email input
                     Text(
                         text = "E-mail",
@@ -338,6 +310,9 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
+                        placeholder = {
+                            Text("seu.email@exemplo.com", color = Color(0xFF64748B), fontSize = 13.sp)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("email_input"),
@@ -394,7 +369,7 @@ fun LoginScreen(
                         onValueChange = { password = it },
                         placeholder = {
                             Text(
-                                "Digite sua senha (ou deixe em branco)",
+                                "Mínimo 6 caracteres",
                                 color = Color(0xFF64748B),
                                 fontSize = 13.sp
                             )
@@ -434,7 +409,15 @@ fun LoginScreen(
                             imeAction = ImeAction.Done
                         ),
                         keyboardActions = KeyboardActions(
-                            onDone = { viewModel.login(email) }
+                            onDone = {
+                                if (email.isNotBlank() && !state.isAuthLoading) {
+                                    if (activeTab == "cadastrar") {
+                                        viewModel.registerUser(name, email, password)
+                                    } else {
+                                        viewModel.login(email, password)
+                                    }
+                                }
+                            }
                         )
                     )
 
@@ -449,38 +432,65 @@ fun LoginScreen(
 
                     // Big Submit Button
                     Button(
-                        onClick = { viewModel.login(email) },
+                        onClick = {
+                            if (email.isNotBlank() && !state.isAuthLoading) {
+                                if (activeTab == "cadastrar") {
+                                    viewModel.registerUser(name, email, password)
+                                } else {
+                                    viewModel.login(email, password)
+                                }
+                            }
+                        },
+                        enabled = !state.isAuthLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
                             .testTag("login_button"),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4F46E5),
+                            disabledContainerColor = Color(0xFF3730A3)
+                        )
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Login,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (activeTab == "entrar") "Entrar" else "Cadastrar",
+                        if (state.isAuthLoading) {
+                            CircularProgressIndicator(
                                 color = Color.White,
-                                fontSize = 15.sp,
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = if (activeTab == "entrar") "Autenticando..." else "Criando no Firebase...",
+                                color = Color.White,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (activeTab == "entrar") Icons.AutoMirrored.Filled.Login else Icons.Default.PersonAdd,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (activeTab == "entrar") "Entrar na Minha Conta" else "Criar Minha Conta",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = if (activeTab == "entrar") "Não tem conta? Cadastrar" else "Já tem uma conta? Entrar",
+                        text = if (activeTab == "entrar") "Não tem conta? Cadastrar-se agora" else "Já tem uma conta? Entrar",
                         color = Color(0xFF818CF8),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,

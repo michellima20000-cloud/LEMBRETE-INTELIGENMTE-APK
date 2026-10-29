@@ -14,7 +14,7 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
-import com.example.R
+import com.lembreteinteligente.R
 
 class AlarmReceiver : BroadcastReceiver() {
 

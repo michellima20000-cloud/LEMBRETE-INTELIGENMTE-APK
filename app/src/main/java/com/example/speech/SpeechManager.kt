@@ -89,8 +89,11 @@ class SpeechManager(private val context: Context) : RecognitionListener, TextToS
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "pt-BR")
             putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "pt-BR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
         }
 
         try {
@@ -165,10 +168,18 @@ class SpeechManager(private val context: Context) : RecognitionListener, TextToS
         _isListening.value = false
         _soundLevel.value = 0f
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-        val text = matches?.firstOrNull()?.trim()
-        if (!text.isNullOrBlank()) {
-            _partialText.value = text
-            onFinalResultCallback?.invoke(text)
+        // Select candidate that has time or reminder keywords, or default to highest confidence
+        val bestText = matches?.firstOrNull { candidate ->
+            val lower = candidate.lowercase()
+            lower.contains("hora") || lower.contains("às") || lower.contains("as ") ||
+            lower.contains(":") || lower.contains("h") || lower.contains("minuto") ||
+            lower.contains("amanhã") || lower.contains("hoje") || lower.contains("meio-dia") ||
+            lower.contains("meia-noite") || lower.contains("daqui a")
+        } ?: matches?.firstOrNull { it.isNotBlank() }?.trim()
+
+        if (!bestText.isNullOrBlank()) {
+            _partialText.value = bestText
+            onFinalResultCallback?.invoke(bestText)
         }
     }
 

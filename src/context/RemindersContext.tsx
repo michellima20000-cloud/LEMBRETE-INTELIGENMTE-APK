@@ -1,6 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  onSnapshot
+} from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 export type ReminderCategory = 'Trabalho' | 'Saúde' | 'Finanças' | 'Pessoal' | 'Estudos';
 export type ReminderStatus = 'pending' | 'postponed' | 'completed';
@@ -26,19 +42,6 @@ export interface UserProfile {
   email: string;
 }
 
-export const KNOWN_USERS: Record<string, UserProfile> = {
-  'usr_68dd8a516780b021': {
-    uid: 'usr_68dd8a516780b021',
-    name: 'Michel',
-    email: 'michel.lima123@gmail.com',
-  },
-  'CiEoITiFP2PqVjFYzu0HZ3TXBmt2': {
-    uid: 'CiEoITiFP2PqVjFYzu0HZ3TXBmt2',
-    name: 'Maya',
-    email: 'mayalimaalves50@gmail.com',
-  },
-};
-
 interface RemindersContextType {
   user: UserProfile | null;
   reminders: ReminderItem[];
@@ -49,6 +52,9 @@ interface RemindersContextType {
   setUser: (user: UserProfile | null) => void;
   setSoundEnabled: (enabled: boolean) => void;
   setVibrationEnabled: (enabled: boolean) => void;
+  signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
+  signInWithEmail: (email: string, pass: string) => Promise<void>;
+  signOutUser: () => Promise<void>;
   addReminder: (params: {
     title: string;
     scheduledTime: number;
@@ -70,14 +76,45 @@ interface RemindersContextType {
 const RemindersContext = createContext<RemindersContextType | undefined>(undefined);
 
 export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserProfile | null>(KNOWN_USERS['usr_68dd8a516780b021']);
+  // Start with null - no pre-filled default account
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('auth_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [vibrationEnabled, setVibrationEnabled] = useState<boolean>(true);
   const isNative = Capacitor.isNativePlatform();
 
-  // Setup Notification Channels on Native Android for continuous alarm & lock screen priority
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        const profile: UserProfile = {
+          uid: firebaseUser.uid,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário',
+          email: firebaseUser.email || '',
+        };
+        setUser(profile);
+        localStorage.setItem('auth_user', JSON.stringify(profile));
+      } else {
+        // If not authenticated in Firebase, clear user
+        setUser(null);
+        localStorage.removeItem('auth_user');
+      }
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Setup Notification Channels on Native Android
   useEffect(() => {
     const initNotifications = async () => {
       if (Capacitor.isNativePlatform()) {
@@ -87,13 +124,12 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             await LocalNotifications.requestPermissions();
           }
 
-          // Create high priority Android Notification Channel configured for AlarmManager wakeup
           await LocalNotifications.createChannel({
             id: 'alarms_high_priority',
             name: 'Alarmes e Lembretes Críticos',
             description: 'Canal de prioridade máxima com som contínuo e vibração na tela de bloqueio',
-            importance: 5, // NotificationManager.IMPORTANCE_HIGH
-            visibility: 1, // NotificationCompat.VISIBILITY_PUBLIC (Lockscreen)
+            importance: 5,
+            visibility: 1,
             sound: 'alarm_loud.wav',
             vibration: true,
             lights: true,
@@ -107,7 +143,7 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     initNotifications();
   }, []);
 
-  // Load reminders scoped by User UID (strict multi-user isolation)
+  // Real-time Firestore sync & local persistence scoped by user UID
   useEffect(() => {
     if (!user) {
       setReminders([]);
@@ -121,18 +157,75 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         setReminders(JSON.parse(raw));
-      } else {
-        setReminders([]);
       }
     } catch (e) {
-      console.error('[Reminders] Erro ao carregar dados locais:', e);
-      setReminders([]);
-    } finally {
+      console.warn('[Reminders] Erro cache local:', e);
+    }
+
+    // Subscribe to user's private Firestore subcollection: /users/{userId}/reminders
+    try {
+      const remindersCol = collection(db, 'users', user.uid, 'reminders');
+      const unsubscribeFirestore = onSnapshot(
+        remindersCol,
+        (snapshot) => {
+          const items: ReminderItem[] = [];
+          snapshot.forEach((docSnap) => {
+            items.push(docSnap.data() as ReminderItem);
+          });
+          // Sort chronologically
+          items.sort((a, b) => a.scheduledTime - b.scheduledTime);
+          setReminders(items);
+          localStorage.setItem(storageKey, JSON.stringify(items));
+          setIsLoading(false);
+        },
+        (err) => {
+          console.warn('[Firestore] Usando modo local para subcoleção do usuário:', err.message);
+          setIsLoading(false);
+        }
+      );
+
+      return () => unsubscribeFirestore();
+    } catch {
       setIsLoading(false);
     }
   }, [user]);
 
-  // Persist reminders scoped by active user UID
+  // Auth: Sign Up with Email and Password
+  const signUpWithEmail = async (email: string, pass: string, name: string) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    if (name.trim()) {
+      await updateProfile(cred.user, { displayName: name.trim() });
+    }
+    const profile: UserProfile = {
+      uid: cred.user.uid,
+      name: name.trim() || cred.user.email?.split('@')[0] || 'Usuário',
+      email: cred.user.email || email,
+    };
+    setUser(profile);
+    localStorage.setItem('auth_user', JSON.stringify(profile));
+  };
+
+  // Auth: Sign In with Email and Password
+  const signInWithEmail = async (email: string, pass: string) => {
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    const profile: UserProfile = {
+      uid: cred.user.uid,
+      name: cred.user.displayName || cred.user.email?.split('@')[0] || 'Usuário',
+      email: cred.user.email || email,
+    };
+    setUser(profile);
+    localStorage.setItem('auth_user', JSON.stringify(profile));
+  };
+
+  // Auth: Sign Out
+  const signOutUser = async () => {
+    await signOut(auth);
+    setUser(null);
+    setReminders([]);
+    localStorage.removeItem('auth_user');
+  };
+
+  // Persist reminders to LocalStorage & Firestore
   const persistReminders = useCallback((updated: ReminderItem[]) => {
     if (!user) return;
     const storageKey = `reminders_${user.uid}`;
@@ -140,25 +233,7 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setReminders(updated);
   }, [user]);
 
-  /**
-   * Syncs reminder to Cloud Firestore with strict multi-user collection isolation:
-   * /users/{userId}/reminders/{reminderId}
-   */
-  const syncItemToFirestore = useCallback(async (item: ReminderItem) => {
-    if (!user) return;
-    try {
-      // In web/serverless Firestore integration:
-      // const docRef = doc(db, 'users', user.uid, 'reminders', item.id);
-      // await setDoc(docRef, item, { merge: true });
-      console.log(`[Firestore] Sincronizado isolado para usuário ${user.uid}:`, item.id);
-    } catch (err) {
-      console.error('[Firestore] Erro na sincronização com nuvem:', err);
-    }
-  }, [user]);
-
-  /**
-   * Schedules alarm in Android native AlarmManager via Capacitor or Web Notification
-   */
+  // Schedules alarm in Android native AlarmManager via LocalNotifications
   const scheduleNotification = useCallback(async (
     id: number,
     title: string,
@@ -166,7 +241,6 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     timestamp_execucao: number
   ) => {
     if (Capacitor.isNativePlatform()) {
-      // Direct Native Android AlarmManager dispatch bypassing web engine freezing
       await LocalNotifications.schedule({
         notifications: [
           {
@@ -188,9 +262,7 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           },
         ],
       });
-      console.log(`[Native Alarm] Agendado no AlarmManager para epoch: ${timestamp_execucao}`);
     } else {
-      // Web browser fallback
       const delayMs = Math.max(0, timestamp_execucao - Date.now());
       if (delayMs < 2147483647 && 'Notification' in window) {
         if (Notification.permission === 'granted') {
@@ -205,9 +277,7 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [user]);
 
-  /**
-   * Add a new reminder
-   */
+  // Add a new reminder
   const addReminder = useCallback(async ({
     title,
     scheduledTime,
@@ -224,7 +294,6 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!user) throw new Error('Usuário não autenticado');
 
     const notificationId = Math.floor(Math.random() * 1000000) + 1;
-    // Calculate exact notification execution time based on user advance notice choice
     const executionTimestamp = scheduledTime - advanceNoticeMinutes * 60 * 1000;
 
     const newItem: ReminderItem = {
@@ -240,133 +309,310 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       recurrence,
     };
 
-    // Schedule native alarm
-    await scheduleNotification(
-      notificationId,
-      `⏰ ${newItem.title}`,
-      `Lembrete programado (${category}) - Toque para abrir`,
-      executionTimestamp
-    );
+    const updated = [newItem, ...reminders].sort((a, b) => a.scheduledTime - b.scheduledTime);
+    persistReminders(updated);
 
-    // Sync to Firestore & local storage
-    await syncItemToFirestore(newItem);
-    persistReminders([newItem, ...reminders]);
+    // Save to Cloud Firestore
+    try {
+      const docRef = doc(db, 'users', user.uid, 'reminders', newItem.id);
+      await setDoc(docRef, newItem, { merge: true });
+    } catch (e) {
+      console.warn('[Firestore] Salvo localmente; sincronizará quando online:', e);
+    }
+
+    // Schedule notification
+    if (executionTimestamp > Date.now()) {
+      await scheduleNotification(
+        notificationId,
+        `Lembrete: ${title}`,
+        advanceNoticeMinutes > 0
+          ? `Compromisso em ${advanceNoticeMinutes} minutos!`
+          : `Chegou a hora do seu compromisso!`,
+        executionTimestamp
+      );
+    }
 
     return newItem;
-  }, [user, reminders, scheduleNotification, syncItemToFirestore, persistReminders]);
+  }, [user, reminders, persistReminders, scheduleNotification]);
 
-  /**
-   * Postpone reminder by X minutes
-   */
+  // Postpone reminder
   const postponeReminder = useCallback(async (id: string, additionalMinutes: number = 10) => {
-    const updated = reminders.map((item) => {
-      if (item.id === id) {
-        const newTime = Date.now() + additionalMinutes * 60 * 1000;
-        scheduleNotification(
-          item.notificationId,
-          `⏰ Adiado: ${item.title}`,
-          `Compromisso remarcado para daqui a ${additionalMinutes} minutos`,
-          newTime
-        );
-        const modified = { ...item, scheduledTime: newTime, status: 'postponed' as ReminderStatus };
-        syncItemToFirestore(modified);
-        return modified;
-      }
-      return item;
-    });
-    persistReminders(updated);
-  }, [reminders, scheduleNotification, syncItemToFirestore, persistReminders]);
+    if (!user) return;
+    const item = reminders.find((r) => r.id === id);
+    if (!item) return;
 
-  /**
-   * Toggle completion status
-   */
-  const toggleComplete = useCallback(async (id: string) => {
-    const updated = reminders.map((item) => {
-      if (item.id === id) {
-        const isNowCompleted = item.status !== 'completed';
-        const modified: ReminderItem = {
-          ...item,
-          status: isNowCompleted ? 'completed' : 'pending',
-          completedAt: isNowCompleted ? Date.now() : undefined,
-        };
-        if (isNowCompleted && Capacitor.isNativePlatform()) {
-          LocalNotifications.cancel({ notifications: [{ id: item.notificationId }] });
-        }
-        syncItemToFirestore(modified);
-        return modified;
-      }
-      return item;
-    });
-    persistReminders(updated);
-  }, [reminders, syncItemToFirestore, persistReminders]);
+    const newScheduledTime = Date.now() + additionalMinutes * 60 * 1000;
+    const updatedItem: ReminderItem = {
+      ...item,
+      scheduledTime: newScheduledTime,
+      status: 'postponed',
+    };
 
-  /**
-   * Delete reminder
-   */
-  const deleteReminder = useCallback(async (id: string) => {
-    const target = reminders.find((r) => r.id === id);
-    if (target && Capacitor.isNativePlatform()) {
-      LocalNotifications.cancel({ notifications: [{ id: target.notificationId }] });
+    const updated = reminders.map((r) => (r.id === id ? updatedItem : r)).sort((a, b) => a.scheduledTime - b.scheduledTime);
+    persistReminders(updated);
+
+    try {
+      const docRef = doc(db, 'users', user.uid, 'reminders', id);
+      await setDoc(docRef, updatedItem, { merge: true });
+    } catch (e) {
+      console.warn('[Firestore] Atualizado localmente:', e);
     }
-    const filtered = reminders.filter((r) => r.id !== id);
-    persistReminders(filtered);
-  }, [reminders, persistReminders]);
 
-  /**
-   * Instant test alarm triggered directly in native AlarmManager
-   */
-  const triggerTestAlarm = useCallback(async (title: string = 'Teste de Alarme Nativo') => {
-    const testId = 99999;
-    const triggerAt = Date.now() + 2000; // 2 seconds from now
     await scheduleNotification(
-      testId,
-      `🚨 ${title}`,
-      'Som contínuo e vibração disparados na camada nativa do Android!',
-      triggerAt
+      item.notificationId,
+      `[Adiado] Lembrete: ${item.title}`,
+      `Compromisso adiado por ${additionalMinutes} minutos.`,
+      newScheduledTime
     );
-  }, [scheduleNotification]);
+  }, [user, reminders, persistReminders, scheduleNotification]);
 
-  /**
-   * Parses natural language command into structured reminder
-   */
-  const parseNaturalLanguage = useCallback((input: string) => {
-    const lower = input.toLowerCase().trim();
+  // Toggle complete
+  const toggleComplete = useCallback(async (id: string) => {
+    if (!user) return;
+    const item = reminders.find((r) => r.id === id);
+    if (!item) return;
+
+    const newStatus: ReminderStatus = item.status === 'completed' ? 'pending' : 'completed';
+    const updatedItem: ReminderItem = {
+      ...item,
+      status: newStatus,
+      completedAt: newStatus === 'completed' ? Date.now() : undefined,
+    };
+
+    const updated = reminders.map((r) => (r.id === id ? updatedItem : r));
+    persistReminders(updated);
+
+    try {
+      const docRef = doc(db, 'users', user.uid, 'reminders', id);
+      await setDoc(docRef, updatedItem, { merge: true });
+    } catch (e) {
+      console.warn('[Firestore] Atualizado localmente:', e);
+    }
+
+    if (newStatus === 'completed' && Capacitor.isNativePlatform()) {
+      try {
+        await LocalNotifications.cancel({ notifications: [{ id: item.notificationId }] });
+      } catch {}
+    }
+  }, [user, reminders, persistReminders]);
+
+  // Delete reminder
+  const deleteReminder = useCallback(async (id: string) => {
+    if (!user) return;
+    const item = reminders.find((r) => r.id === id);
+    const updated = reminders.filter((r) => r.id !== id);
+    persistReminders(updated);
+
+    try {
+      const docRef = doc(db, 'users', user.uid, 'reminders', id);
+      await deleteDoc(docRef);
+    } catch (e) {
+      console.warn('[Firestore] Excluído localmente:', e);
+    }
+
+    if (item && Capacitor.isNativePlatform()) {
+      try {
+        await LocalNotifications.cancel({ notifications: [{ id: item.notificationId }] });
+      } catch {}
+    }
+  }, [user, reminders, persistReminders]);
+
+  // Trigger test alarm
+  const triggerTestAlarm = useCallback(async (title = 'Alarme de Alta Prioridade') => {
+    const testTime = Date.now() + 2000;
+    const notifId = 99999;
+    await scheduleNotification(
+      notifId,
+      `🔔 ${title}`,
+      'Disparo de teste imediato no subsistema nativo do Android com som contínuo!',
+      testTime
+    );
+
+    // Audio fallback for browser
+    if (soundEnabled && 'AudioContext' in window) {
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.4);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.8);
+      } catch {}
+    }
+  }, [scheduleNotification, soundEnabled]);
+
+  // Natural Language Parser
+  const parseNaturalLanguage = useCallback((input: string): {
+    title: string;
+    category: ReminderCategory;
+    timestamp: number;
+    hour: number;
+    minute: number;
+    isTomorrow: boolean;
+  } => {
+    const raw = input.trim();
+    const lower = raw.toLowerCase();
     let category: ReminderCategory = 'Pessoal';
-    if (lower.includes('remédio') || lower.includes('saúde') || lower.includes('médico') || lower.includes('alongamento')) {
+
+    if (lower.includes('remédio') || lower.includes('remedio') || lower.includes('médico') || lower.includes('medico') || lower.includes('saúde') || lower.includes('saude') || lower.includes('dentista') || lower.includes('consulta') || lower.includes('treino') || lower.includes('água') || lower.includes('agua') || lower.includes('pressão') || lower.includes('exame')) {
       category = 'Saúde';
-    } else if (lower.includes('reunião') || lower.includes('trabalho') || lower.includes('projeto') || lower.includes('cliente')) {
+    } else if (lower.includes('reunião') || lower.includes('reuniao') || lower.includes('trabalho') || lower.includes('projeto') || lower.includes('cliente') || lower.includes('call') || lower.includes('apresentação') || lower.includes('relatório') || lower.includes('equipe') || lower.includes('chefe')) {
       category = 'Trabalho';
-    } else if (lower.includes('pagar') || lower.includes('conta') || lower.includes('boleto') || lower.includes('banco') || lower.includes('dinheiro')) {
+    } else if (lower.includes('pagar') || lower.includes('pagamento') || lower.includes('boleto') || lower.includes('conta') || lower.includes('fatura') || lower.includes('pix') || lower.includes('banco') || lower.includes('aluguel') || lower.includes('cartão')) {
       category = 'Finanças';
-    } else if (lower.includes('estudar') || lower.includes('aula') || lower.includes('prova') || lower.includes('livro')) {
+    } else if (lower.includes('estudar') || lower.includes('estudo') || lower.includes('aula') || lower.includes('prova') || lower.includes('curso') || lower.includes('livro') || lower.includes('faculdade') || lower.includes('escola') || lower.includes('inglês')) {
       category = 'Estudos';
     }
 
     const now = new Date();
-    let targetDate = new Date(now);
+    const targetDate = new Date();
 
-    if (lower.includes('amanhã')) {
-      targetDate.setDate(targetDate.getDate() + 1);
+    // 1. Check relative: "daqui a X minutos / horas"
+    const relMinMatch = lower.match(/(?:daqui\s*a|em)\s*(\d+|meia|uma|duas|três|quatro|cinco|dez|quinze|vinte|trinta)\s*(?:minutos?|min)/i);
+    if (relMinMatch) {
+      const minStr = relMinMatch[1].toLowerCase();
+      const mins = minStr === 'meia' ? 30 : minStr === 'uma' ? 1 : minStr === 'duas' ? 2 : minStr === 'três' ? 3 : minStr === 'quatro' ? 4 : minStr === 'cinco' ? 5 : minStr === 'dez' ? 10 : minStr === 'quinze' ? 15 : minStr === 'vinte' ? 20 : minStr === 'trinta' ? 30 : (parseInt(minStr, 10) || 10);
+      targetDate.setMinutes(now.getMinutes() + mins);
+      const cleanTitle = raw.replace(relMinMatch[0], '').replace(/^me\s+lembre\s+(?:de\s+)?/i, '').trim();
+      return {
+        title: cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1) || raw,
+        category,
+        timestamp: targetDate.getTime(),
+        hour: targetDate.getHours(),
+        minute: targetDate.getMinutes(),
+        isTomorrow: false,
+      };
     }
 
-    // Match patterns like "às 15h", "15:30", "às 9h", "8h"
-    const timeMatch = lower.match(/(?:às\s+|as\s+)?(\d{1,2})(?:h|:(\d{2}))/);
-    if (timeMatch) {
-      const hours = parseInt(timeMatch[1], 10);
-      const minutes = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
-      targetDate.setHours(hours, minutes, 0, 0);
-      if (targetDate.getTime() <= Date.now() && !lower.includes('amanhã')) {
+    // 2. Date determination
+    const isTomorrow = lower.includes('amanhã') || lower.includes('amanha');
+    const isDayAfter = lower.includes('depois de amanhã') || lower.includes('depois de amanha');
+    if (isDayAfter) {
+      targetDate.setDate(now.getDate() + 2);
+    } else if (isTomorrow) {
+      targetDate.setDate(now.getDate() + 1);
+    }
+
+    // 3. Normalization of spoken numbers
+    let normalized = lower
+      .replace(/meio-dia|meio dia/g, '12:00')
+      .replace(/meia-noite|meia noite/g, '00:00')
+      .replace(/uma hora/g, '1 hora')
+      .replace(/duas horas/g, '2 horas')
+      .replace(/três horas|tres horas/g, '3 horas')
+      .replace(/quatro horas/g, '4 horas')
+      .replace(/cinco horas/g, '5 horas')
+      .replace(/seis horas/g, '6 horas')
+      .replace(/sete horas/g, '7 horas')
+      .replace(/oito horas/g, '8 horas')
+      .replace(/nove horas/g, '9 horas')
+      .replace(/dez horas/g, '10 horas')
+      .replace(/onze horas/g, '11 horas')
+      .replace(/doze horas/g, '12 horas')
+      .replace(/(?:às|as)\s+uma\b/g, 'às 1')
+      .replace(/(?:às|as)\s+duas\b/g, 'às 2')
+      .replace(/(?:às|as)\s+três\b|(?:às|as)\s+tres\b/g, 'às 3')
+      .replace(/(?:às|as)\s+quatro\b/g, 'às 4')
+      .replace(/(?:às|as)\s+cinco\b/g, 'às 5')
+      .replace(/(?:às|as)\s+seis\b/g, 'às 6')
+      .replace(/(?:às|as)\s+sete\b/g, 'às 7')
+      .replace(/(?:às|as)\s+oito\b/g, 'às 8')
+      .replace(/(?:às|as)\s+nove\b/g, 'às 9')
+      .replace(/(?:às|as)\s+dez\b/g, 'às 10')
+      .replace(/(?:às|as)\s+onze\b/g, 'às 11')
+      .replace(/e\s+meia\b/g, 'e 30')
+      .replace(/e\s+quinze\b/g, 'e 15')
+      .replace(/e\s+quarenta\s+e\s+cinco\b/g, 'e 45')
+      .replace(/e\s+vinte\b/g, 'e 20');
+
+    const isTarde = normalized.includes('tarde');
+    const isNoite = normalized.includes('noite');
+    const isManha = normalized.includes('manhã') || normalized.includes('manha') || normalized.includes('madrugada');
+
+    // 4. Time matching
+    // Digital: 14:30 or 14h30
+    const digitalMatch = normalized.match(/\b(\d{1,2})[:hH](\d{2})\b/);
+    // Horas: 14 horas e 30 minutos / 10 horas
+    const horasMatch = normalized.match(/\b(\d{1,2})\s*(?:horas?|hrs?|hs?|h)\s*(?:(?:e|com)\s*(\d{1,2})(?:\s*minutos?)?)?\b/);
+    // às HH e MM / às HH
+    const asMatch = normalized.match(/(?:às|as|para\s+(?:às|as)?)\s*(\d{1,2})(?:\s*e\s*(\d{1,2}))?\b/);
+
+    let hour: number | null = null;
+    let minute = 0;
+    let matchedPhrase = '';
+
+    if (digitalMatch) {
+      hour = parseInt(digitalMatch[1], 10);
+      minute = parseInt(digitalMatch[2], 10) || 0;
+      matchedPhrase = digitalMatch[0];
+    } else if (horasMatch) {
+      hour = parseInt(horasMatch[1], 10);
+      minute = horasMatch[2] ? parseInt(horasMatch[2], 10) : 0;
+      matchedPhrase = horasMatch[0];
+    } else if (asMatch) {
+      hour = parseInt(asMatch[1], 10);
+      minute = asMatch[2] ? parseInt(asMatch[2], 10) : 0;
+      matchedPhrase = asMatch[0];
+    }
+
+    if (hour !== null) {
+      hour = Math.min(23, Math.max(0, hour));
+      minute = Math.min(59, Math.max(0, minute));
+
+      if ((isTarde || isNoite) && hour >= 1 && hour <= 11) {
+        hour += 12;
+      } else if (isManha && hour === 12) {
+        hour = 0;
+      } else if (!isTarde && !isNoite && !isManha && !isTomorrow && !isDayAfter) {
+        const curHour = now.getHours();
+        if (hour >= 1 && hour <= 11 && hour <= curHour && (hour + 12) > curHour) {
+          hour += 12;
+        }
+      }
+
+      targetDate.setHours(hour, minute, 0, 0);
+
+      if (targetDate.getTime() <= now.getTime() && !isTomorrow && !isDayAfter) {
         targetDate.setDate(targetDate.getDate() + 1);
       }
     } else {
-      // default: 1 hour from now
       targetDate.setHours(now.getHours() + 1, 0, 0, 0);
     }
 
+    // Clean Title
+    let clean = raw
+      .replace(/^me\s+lembre\s+(?:de\s+|para\s+|que\s+)?/i, '')
+      .replace(/^lembrete\s+(?:de\s+|para\s+)?/i, '')
+      .replace(/^agendar\s+/i, '')
+      .replace(/^marcar\s+/i, '')
+      .replace(/^criar\s+lembrete\s+(?:de\s+|para\s+)?/i, '')
+      .replace(/\bdepois\s+de\s+amanh[ãa]\b/gi, '')
+      .replace(/\bamanh[ãa]\b/gi, '')
+      .replace(/\bhoje\b/gi, '')
+      .replace(/\bda\s+manh[ãa]\b/gi, '')
+      .replace(/\bda\s+tarde\b/gi, '')
+      .replace(/\bda\s+noite\b/gi, '');
+
+    if (matchedPhrase) {
+      clean = clean.replace(new RegExp(matchedPhrase, 'gi'), '');
+    }
+
+    clean = clean.replace(/\s+às\s*$/i, '').replace(/\s+as\s*$/i, '').replace(/\s+para\s*$/i, '').replace(/\s{2,}/g, ' ').trim();
+    const finalTitle = clean.length > 0 ? (clean.charAt(0).toUpperCase() + clean.slice(1)) : raw;
+
     return {
-      title: input,
+      title: finalTitle,
       category,
       timestamp: targetDate.getTime(),
+      hour: targetDate.getHours(),
+      minute: targetDate.getMinutes(),
+      isTomorrow: targetDate.getDate() !== now.getDate(),
     };
   }, []);
 
@@ -382,6 +628,9 @@ export const RemindersProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setUser,
         setSoundEnabled,
         setVibrationEnabled,
+        signUpWithEmail,
+        signInWithEmail,
+        signOutUser,
         addReminder,
         postponeReminder,
         toggleComplete,

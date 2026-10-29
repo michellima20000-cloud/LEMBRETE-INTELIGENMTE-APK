@@ -33,8 +33,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.Reminder
-import com.example.model.USER_MAYA
-import com.example.model.USER_MICHEL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -47,7 +45,6 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showUserSwitchDialog by remember { mutableStateOf(false) }
-    var showBackgroundInfoDialog by remember { mutableStateOf(false) }
 
     // Native RECORD_AUDIO permission launcher
     val audioPermissionLauncher = rememberLauncherForActivityResult(
@@ -134,14 +131,14 @@ fun DashboardScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = state.currentUser.avatarLetter,
+                                    text = state.currentUser?.avatarLetter ?: "U",
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
                             Text(
-                                text = state.currentUser.name,
+                                text = state.currentUser?.name ?: "Usuário",
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -263,42 +260,6 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
-                // Clean status indicator pill
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 2.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFF131B38),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF222F5A)),
-                            modifier = Modifier.clickable { showBackgroundInfoDialog = true }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF10B981))
-                                )
-                                Text(
-                                    text = "APK Nativo • AlarmManager 2º Plano Ativo",
-                                    color = Color(0xFF94A3B8),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-                }
 
                 // Command input card with native microphone recognition and live sound visualizer
                 item {
@@ -398,7 +359,7 @@ fun DashboardScreen(
                         }
 
                         Text(
-                            text = "Lembretes isolados para: ${state.currentUser.name}",
+                            text = "Lembretes isolados para: ${state.currentUser?.name ?: "Você"}",
                             color = Color(0xFF94A3B8),
                             fontSize = 12.sp,
                             modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
@@ -481,43 +442,6 @@ fun DashboardScreen(
                     }
                 }
 
-                // Category Filter Chips
-                item {
-                    val scrollChips = rememberScrollState()
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(scrollChips),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FilterList,
-                            contentDescription = null,
-                            tint = Color(0xFF64748B),
-                            modifier = Modifier
-                                .size(20.dp)
-                                .padding(end = 2.dp)
-                        )
-                        listOf("Todas", "Trabalho", "Saúde", "Finanças", "Pessoal", "Estudos").forEach { cat ->
-                            val isSelected = state.categoryFilter == cat
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (isSelected) Color(0xFF4F46E5) else Color(0xFF141C38),
-                                border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF222D52)) else null,
-                                modifier = Modifier.clickable { viewModel.setCategoryFilter(cat) }
-                            ) {
-                                Text(
-                                    text = cat,
-                                    color = if (isSelected) Color.White else Color(0xFFCBD5E1),
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-                    }
-                }
 
                 // Reminders list OR Empty State
                 if (state.filteredReminders.isEmpty()) {
@@ -559,149 +483,82 @@ fun DashboardScreen(
         }
     }
 
-    // Switch User Dialog (Michel vs Maya)
+    // User Profile Dialog
     if (showUserSwitchDialog) {
         AlertDialog(
             onDismissRequest = { showUserSwitchDialog = false },
             containerColor = Color(0xFF121933),
             title = {
-                Text("Contas Isoladas no Firestore", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Minha Conta", color = Color.White, fontWeight = FontWeight.Bold)
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Alterne entre as contas para verificar o isolamento das subcoleções Firestore (UIDs Michel e Maya):",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 13.sp
-                    )
-
-                    // Michel
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable {
-                                viewModel.switchUser(USER_MICHEL)
-                                showUserSwitchDialog = false
-                            },
-                        color = if (state.currentUser.uid == USER_MICHEL.uid) Color(0xFF1E284A) else Color(0xFF0D142E),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (state.currentUser.uid == USER_MICHEL.uid) Color(0xFF4F46E5) else Color(0xFF26335C)
-                        )
-                    ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    state.currentUser?.let { user ->
                         Row(
-                            modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(32.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(Color(0xFF4F46E5)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("M", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = user.avatarLetter,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                )
                             }
                             Column {
-                                Text("Michel", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("UID: ${USER_MICHEL.uid}", color = Color(0xFF818CF8), fontSize = 10.sp)
-                                Text(USER_MICHEL.email, color = Color(0xFF94A3B8), fontSize = 11.sp)
+                                Text(user.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text(user.email, color = Color(0xFF94A3B8), fontSize = 12.sp)
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF192242),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2C396B))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF10B981))
+                                )
+                                Text(
+                                    text = "Conta autenticada com Firebase Firestore",
+                                    color = Color(0xFF6EE7B7),
+                                    fontSize = 11.sp
+                                )
                             }
                         }
                     }
 
-                    // Maya
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable {
-                                viewModel.switchUser(USER_MAYA)
-                                showUserSwitchDialog = false
-                            },
-                        color = if (state.currentUser.uid == USER_MAYA.uid) Color(0xFF1E284A) else Color(0xFF0D142E),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (state.currentUser.uid == USER_MAYA.uid) Color(0xFF4F46E5) else Color(0xFF26335C)
-                        )
+                    Button(
+                        onClick = {
+                            viewModel.logout()
+                            showUserSwitchDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF06B6D4)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("M", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
-                            Column {
-                                Text("Maya", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("UID: ${USER_MAYA.uid}", color = Color(0xFF06B6D4), fontSize = 10.sp)
-                                Text(USER_MAYA.email, color = Color(0xFF94A3B8), fontSize = 11.sp)
-                            }
-                        }
+                        Text("Sair da Conta", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showUserSwitchDialog = false }) {
                     Text("Fechar", color = Color(0xFF818CF8))
-                }
-            }
-        )
-    }
-
-    // Background Architecture Info Dialog
-    if (showBackgroundInfoDialog) {
-        AlertDialog(
-            onDismissRequest = { showBackgroundInfoDialog = false },
-            containerColor = Color(0xFF121933),
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Security, contentDescription = null, tint = Color(0xFF10B981))
-                    Text("Camada Nativa Android", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "• Microfone Nativo do Sistema: Reconhecimento de voz em tempo real através do SpeechRecognizer interno do Android (sem depender de diálogo popup externo do Google).",
-                        color = Color(0xFFCBD5E1),
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        "• Síntese de Voz (TTS): Confirmação em áudio em português falado na hora do agendamento e no disparo do alarme.",
-                        color = Color(0xFFCBD5E1),
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        "• AlarmManager Core: Alarmes registrados com setExactAndAllowWhileIdle() diretamente no kernel do Android.",
-                        color = Color(0xFFCBD5E1),
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        "• Tela de Bloqueio: Intent disparada com WAKE_LOCK e CATEGORY_ALARM com prioridade máxima.",
-                        color = Color(0xFFCBD5E1),
-                        fontSize = 12.sp
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showBackgroundInfoDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
-                ) {
-                    Text("Entendido", color = Color.White)
                 }
             }
         )

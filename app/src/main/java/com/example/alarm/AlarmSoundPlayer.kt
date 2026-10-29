@@ -11,7 +11,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
-import com.example.R
+import com.lembreteinteligente.R
 
 object AlarmSoundPlayer {
     private var mediaPlayer: MediaPlayer? = null

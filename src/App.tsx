@@ -1,18 +1,13 @@
 import React, { useState } from 'react';
-import { useReminders, KNOWN_USERS, ReminderCategory, AdvanceNoticeMinutes } from './context/RemindersContext';
+import { useReminders, ReminderCategory, AdvanceNoticeMinutes } from './context/RemindersContext';
 import {
   Calendar,
-  Download,
-  Bell,
   Volume2,
-  VolumeX,
-  Cpu,
   LogOut,
   Mic,
   Send,
   Sparkles,
   Search,
-  Filter,
   Check,
   RotateCcw,
   Trash2,
@@ -25,19 +20,22 @@ import {
   EyeOff,
   UserPlus,
   LogIn,
-  AlertTriangle
+  User,
+  AlertCircle
 } from 'lucide-react';
 
 export default function App() {
   const {
     user,
     reminders,
-    isNative,
+    isLoading: isAppLoading,
     soundEnabled,
     vibrationEnabled,
-    setUser,
     setSoundEnabled,
     setVibrationEnabled,
+    signUpWithEmail,
+    signInWithEmail,
+    signOutUser,
     addReminder,
     postponeReminder,
     toggleComplete,
@@ -46,12 +44,14 @@ export default function App() {
     parseNaturalLanguage
   } = useReminders();
 
-  // Navigation / Auth
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  // Auth Form State
   const [authTab, setAuthTab] = useState<'entrar' | 'cadastrar'>('entrar');
-  const [emailInput, setEmailInput] = useState<string>('michel.lima123@gmail.com');
+  const [nameInput, setNameInput] = useState<string>('');
+  const [emailInput, setEmailInput] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
 
   // Command card state
   const [commandText, setCommandText] = useState<string>('');
@@ -63,8 +63,7 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState<string>('Todas');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Info modal
-  const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
+  // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -72,20 +71,20 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Speech Recognition
+  const speakText = (text: string) => {
+    if ('speechSynthesis' in window && soundEnabled) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'pt-BR';
+      utterance.rate = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Speech Recognition (Microfone Nativo do Sistema)
   const handleMicClick = () => {
     const SpeechRecognition = (window as unknown as { SpeechRecognition?: any; webkitSpeechRecognition?: any }).SpeechRecognition ||
       (window as unknown as { SpeechRecognition?: any; webkitSpeechRecognition?: any }).webkitSpeechRecognition;
-
-    const speakText = (text: string) => {
-      if ('speechSynthesis' in window && soundEnabled) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'pt-BR';
-        utterance.rate = 1.0;
-        window.speechSynthesis.speak(utterance);
-      }
-    };
 
     if (!SpeechRecognition) {
       const simulated = 'Tomar remédio hoje às 15h';
@@ -96,8 +95,9 @@ export default function App() {
         category: parsed.category,
         advanceNoticeMinutes: advanceNotice,
       });
-      speakText('Agendado automaticamente para às 15 horas: Tomar remédio.');
-      showToast('Lembrete agendado automaticamente por voz!');
+      const simTime = new Date(parsed.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      speakText(`Agendado automaticamente para às ${simTime}: ${parsed.title}`);
+      showToast(`Lembrete agendado para às ${simTime}: ${parsed.title}`);
       setCommandText('');
       return;
     }
@@ -132,17 +132,7 @@ export default function App() {
     }
   };
 
-  const speakText = (text: string) => {
-    if ('speechSynthesis' in window && soundEnabled) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'pt-BR';
-      utterance.rate = 1.0;
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
-  // Schedule from Command
+  // Schedule from Command Button
   const handleSchedule = async () => {
     if (!commandText.trim()) return;
     const parsed = parseNaturalLanguage(commandText);
@@ -158,19 +148,47 @@ export default function App() {
     showToast('Lembrete agendado com sucesso!');
   };
 
-  // Auth Submit
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  // Auth Submit (Firebase Auth)
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (emailInput.toLowerCase().includes('maya')) {
-      setUser(KNOWN_USERS['CiEoITiFP2PqVjFYzu0HZ3TXBmt2']);
-    } else {
-      setUser(KNOWN_USERS['usr_68dd8a516780b021']);
+    setAuthError(null);
+    setAuthLoading(true);
+
+    try {
+      if (authTab === 'cadastrar') {
+        if (!nameInput.trim()) {
+          throw new Error('Por favor, informe seu nome.');
+        }
+        if (passwordInput.length < 6) {
+          throw new Error('A senha deve ter no mínimo 6 caracteres.');
+        }
+        await signUpWithEmail(emailInput.trim(), passwordInput, nameInput.trim());
+        showToast(`Conta criada com sucesso! Bem-vindo(a), ${nameInput.trim()}!`);
+      } else {
+        await signInWithEmail(emailInput.trim(), passwordInput);
+        showToast('Login realizado com sucesso no Firebase!');
+      }
+    } catch (err: any) {
+      console.error('[Auth Error]', err);
+      let message = 'Ocorreu um erro na autenticação. Tente novamente.';
+      if (err.code === 'auth/email-already-in-use') {
+        message = 'Este e-mail já está cadastrado. Faça login ou use outro.';
+      } else if (err.code === 'auth/invalid-email') {
+        message = 'Formato de e-mail inválido.';
+      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        message = 'E-mail ou senha incorretos.';
+      } else if (err.code === 'auth/weak-password') {
+        message = 'A senha é muito fraca. Digite pelo menos 6 caracteres.';
+      } else if (err.message) {
+        message = err.message;
+      }
+      setAuthError(message);
+    } finally {
+      setAuthLoading(false);
     }
-    setIsAuthenticated(true);
-    showToast(`Bem-vindo, ${emailInput.toLowerCase().includes('maya') ? 'Maya' : 'Michel'}!`);
   };
 
-  // Filtered List
+  // Filtered Reminders List
   const filteredReminders = reminders.filter((r) => {
     const matchesStatus =
       statusFilter === 'Pendentes'
@@ -197,8 +215,8 @@ export default function App() {
     Todos: reminders.length,
   };
 
-  // Render Login Screen if not authenticated
-  if (!isAuthenticated) {
+  // Render Login / Register Screen when user is not authenticated
+  if (!user) {
     return (
       <div className="min-h-screen bg-[#080C1B] flex flex-col justify-between p-4 md:p-8 text-slate-100">
         {/* Top Header */}
@@ -211,19 +229,12 @@ export default function App() {
               Lembrete <span className="text-indigo-400">Inteligente</span>
             </h1>
           </div>
-          <button
-            onClick={() => setShowInfoModal(true)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition shadow-md shadow-indigo-600/30"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Instalar App</span>
-          </button>
         </header>
 
-        {/* Login Card */}
+        {/* Login / Cadastro Card */}
         <div className="max-w-md w-full mx-auto my-8 bg-[#121933] border border-[#1E294B] rounded-3xl p-6 md:p-8 shadow-2xl relative">
           <div className="flex flex-col items-center text-center">
-            {/* Glowing Brain */}
+            {/* Glowing Brain Icon */}
             <div className="relative mb-4">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/40">
                 <Brain className="w-11 h-11 text-white" />
@@ -235,37 +246,19 @@ export default function App() {
               Lembrete <span className="text-indigo-400">Inteligente</span>
             </h2>
             <p className="text-sm text-slate-400 mt-1 mb-6">
-              Entre com sua conta para acessar e sincronizar
+              {authTab === 'entrar'
+                ? 'Entre com seu e-mail e senha para acessar'
+                : 'Crie seu cadastro gratuito para salvar seus lembretes'}
             </p>
 
-            {/* Account Quick Selectors */}
-            <div className="flex items-center space-x-2 mb-5 text-xs">
-              <span className="text-slate-500">Contas isoladas:</span>
-              <button
-                type="button"
-                onClick={() => setEmailInput('michel.lima123@gmail.com')}
-                className={`px-2.5 py-1 rounded-lg font-medium transition ${
-                  emailInput.includes('michel') ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'
-                }`}
-              >
-                Michel
-              </button>
-              <button
-                type="button"
-                onClick={() => setEmailInput('mayalimaalves50@gmail.com')}
-                className={`px-2.5 py-1 rounded-lg font-medium transition ${
-                  emailInput.includes('maya') ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'
-                }`}
-              >
-                Maya
-              </button>
-            </div>
-
-            {/* Tab Selector */}
+            {/* Tab Selector: Entrar vs Cadastrar */}
             <div className="grid grid-cols-2 w-full p-1 bg-[#0B1021] rounded-xl mb-6">
               <button
                 type="button"
-                onClick={() => setAuthTab('entrar')}
+                onClick={() => {
+                  setAuthTab('entrar');
+                  setAuthError(null);
+                }}
                 className={`flex items-center justify-center space-x-2 py-2 rounded-lg text-xs font-semibold transition ${
                   authTab === 'entrar' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                 }`}
@@ -275,7 +268,10 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => setAuthTab('cadastrar')}
+                onClick={() => {
+                  setAuthTab('cadastrar');
+                  setAuthError(null);
+                }}
                 className={`flex items-center justify-center space-x-2 py-2 rounded-lg text-xs font-semibold transition ${
                   authTab === 'cadastrar' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                 }`}
@@ -285,8 +281,35 @@ export default function App() {
               </button>
             </div>
 
+            {/* Error Message Box */}
+            {authError && (
+              <div className="w-full mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2 text-left">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+                <span>{authError}</span>
+              </div>
+            )}
+
             {/* Form */}
             <form onSubmit={handleAuthSubmit} className="w-full space-y-4 text-left">
+              {/* Name Field (Only in Cadastrar) */}
+              {authTab === 'cadastrar' && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Seu Nome Completo</label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Carlos Silva"
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2.5 bg-[#17203E] border border-[#26335C] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Email Field */}
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">E-mail</label>
                 <div className="relative">
@@ -294,25 +317,24 @@ export default function App() {
                   <input
                     type="email"
                     required
+                    placeholder="seu.email@exemplo.com"
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-[#17203E] border border-[#26335C] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 transition"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-[#17203E] border border-[#26335C] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-500"
                   />
                 </div>
               </div>
 
+              {/* Password Field */}
               <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="text-xs font-medium text-slate-300">Senha</label>
-                  <button type="button" className="text-xs text-indigo-400 hover:underline">
-                    Esqueci a senha
-                  </button>
-                </div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Senha</label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Digite sua senha (ou deixe em branco)"
+                    required
+                    minLength={6}
+                    placeholder="Mínimo 6 caracteres"
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
                     className="w-full pl-10 pr-10 py-2.5 bg-[#17203E] border border-[#26335C] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-500"
@@ -326,25 +348,40 @@ export default function App() {
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Toque no olho para visualizar a senha antes de enviar.
+                  {authTab === 'cadastrar'
+                    ? 'A senha deve conter no mínimo 6 caracteres.'
+                    : 'Toque no olho para visualizar a senha antes de enviar.'}
                 </p>
               </div>
 
+              {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm text-white transition flex items-center justify-center space-x-2 shadow-lg shadow-indigo-600/30 mt-2"
+                disabled={authLoading}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl font-bold text-sm text-white transition flex items-center justify-center space-x-2 shadow-lg shadow-indigo-600/30 mt-2"
               >
-                <LogIn className="w-4 h-4" />
-                <span>{authTab === 'entrar' ? 'Entrar' : 'Cadastrar'}</span>
+                {authLoading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    {authTab === 'entrar' ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                    <span>{authTab === 'entrar' ? 'Entrar na Conta' : 'Criar Conta no Firebase'}</span>
+                  </>
+                )}
               </button>
             </form>
 
             <button
               type="button"
-              onClick={() => setAuthTab(authTab === 'entrar' ? 'cadastrar' : 'entrar')}
+              onClick={() => {
+                setAuthTab(authTab === 'entrar' ? 'cadastrar' : 'entrar');
+                setAuthError(null);
+              }}
               className="text-xs text-indigo-400 mt-5 hover:underline"
             >
-              {authTab === 'entrar' ? 'Não tem conta? Cadastrar' : 'Já tem uma conta? Entrar'}
+              {authTab === 'entrar'
+                ? 'Não tem conta? Cadastrar-se agora'
+                : 'Já tem uma conta? Fazer login'}
             </button>
           </div>
         </div>
@@ -357,7 +394,7 @@ export default function App() {
     );
   }
 
-  // Dashboard Screen (faithfully matching Screenshot 1)
+  // Dashboard Screen (Authenticated user)
   return (
     <div className="min-h-screen bg-[#090D1C] text-slate-100 flex flex-col justify-between">
       {/* Top App Header */}
@@ -373,45 +410,22 @@ export default function App() {
             </h1>
           </div>
 
-          {/* Clean Action buttons */}
+          {/* User Badge & Logout */}
           <div className="flex items-center space-x-2 flex-shrink-0">
-            {/* Sound Toggle */}
-            <button
-              onClick={() => {
-                setSoundEnabled(!soundEnabled);
-                showToast(soundEnabled ? 'Som silenciado' : 'Som ativado');
-              }}
-              className="p-2 rounded-xl bg-[#141C38] hover:bg-[#1C264D] text-indigo-400 transition"
-              title="Alternar som"
-            >
-              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            </button>
-
-            {/* User Badge */}
-            <button
-              onClick={() => {
-                if (user?.uid === KNOWN_USERS['usr_68dd8a516780b021'].uid) {
-                  setUser(KNOWN_USERS['CiEoITiFP2PqVjFYzu0HZ3TXBmt2']);
-                  showToast('Conectado como Maya (Isolamento Firestore ativo)');
-                } else {
-                  setUser(KNOWN_USERS['usr_68dd8a516780b021']);
-                  showToast('Conectado como Michel (Isolamento Firestore ativo)');
-                }
-              }}
-              className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[#1B2344] hover:bg-[#242F5C] border border-[#2B3968] text-xs transition"
-              title="Alternar conta isolada"
-            >
+            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[#1B2344] border border-[#2B3968] text-xs">
               <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white text-[10px]">
-                {user?.name.charAt(0) || 'M'}
+                {user.name.charAt(0).toUpperCase()}
               </div>
-              <span className="font-semibold text-white">{user?.name || 'Michel'}</span>
-            </button>
+              <span className="font-semibold text-white max-w-[120px] truncate">{user.name}</span>
+            </div>
 
-            {/* Logout */}
             <button
-              onClick={() => setIsAuthenticated(false)}
+              onClick={async () => {
+                await signOutUser();
+                showToast('Desconectado com sucesso');
+              }}
               className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition"
-              title="Sair"
+              title="Sair da conta"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -421,16 +435,6 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-4xl mx-auto w-full flex-1 px-4 py-5 space-y-5">
-        {/* Clean System Status Pill */}
-        <div className="flex justify-center">
-          <button
-            onClick={() => setShowInfoModal(true)}
-            className="flex items-center space-x-2 px-3 py-1 rounded-full bg-[#131B38] border border-[#222F5A] text-slate-400 hover:text-slate-200 text-xs transition shadow-sm"
-          >
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-medium">APK Nativo • AlarmManager 2º Plano Ativo</span>
-          </button>
-        </div>
         {/* Natural Language Command Card */}
         <div className="bg-[#121933] border border-[#1F2A52] rounded-2xl p-4 md:p-5 shadow-xl">
           <textarea
@@ -481,7 +485,7 @@ export default function App() {
                     ? 'bg-rose-500 text-white animate-pulse'
                     : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30'
                 }`}
-                title="Falar comando de voz"
+                title="Microfone do sistema (agendamento automático)"
               >
                 <Mic className="w-4 h-4" />
               </button>
@@ -551,7 +555,7 @@ export default function App() {
             </div>
           </div>
           <p className="text-xs text-slate-400 mb-3">
-            Lembretes isolados para: <span className="text-indigo-400 font-semibold">{user?.name || 'Michel'}</span>
+            Lembretes sincronizados no Firebase para: <span className="text-indigo-400 font-semibold">{user.name}</span> ({user.email})
           </p>
 
           {/* Search bar */}
@@ -584,24 +588,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Category Filter Chips */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs">
-          <Filter className="w-3.5 h-3.5 text-slate-500 mr-1 flex-shrink-0" />
-          {['Todas', 'Trabalho', 'Saúde', 'Finanças', 'Pessoal', 'Estudos'].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategoryFilter(cat)}
-              className={`px-3 py-1.5 rounded-full whitespace-nowrap transition ${
-                categoryFilter === cat
-                  ? 'bg-indigo-600 text-white font-bold'
-                  : 'bg-[#141C38] border border-[#222D52] text-slate-300 hover:text-white'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
         {/* Reminders List or Empty State */}
         {filteredReminders.length === 0 ? (
           <div className="bg-[#10162E] border border-[#1A2242] rounded-2xl py-12 px-6 flex flex-col items-center text-center">
@@ -611,7 +597,6 @@ export default function App() {
                 <div className="w-9 h-9 rounded-full bg-rose-500/20 border-2 border-rose-500 flex items-center justify-center">
                   <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-rose-400 rotate-45 transform" />
                 </div>
-                {/* Bell ears */}
                 <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-rose-500 rounded-full" />
                 <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full" />
               </div>
@@ -771,33 +756,6 @@ export default function App() {
       <footer className="text-center text-xs text-slate-500 py-4 border-t border-[#151D38]">
         • Lembrete Inteligente • Agenda de Lembretes e Compromissos
       </footer>
-
-      {/* Info Modal */}
-      {showInfoModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-          <div className="bg-[#121933] border border-[#26335C] rounded-2xl max-w-md w-full p-6 text-xs text-slate-300 space-y-3">
-            <h3 className="text-base font-bold text-white flex items-center">
-              <Cpu className="w-5 h-5 text-indigo-400 mr-2" />
-              Arquitetura Nativa Android & Capacitor
-            </h3>
-            <p>
-              • <strong>AlarmManager Core:</strong> No APK Android, os alarmes usam <code className="text-indigo-300">setExactAndAllowWhileIdle()</code> disparando diretamente no relógio do sistema.
-            </p>
-            <p>
-              • <strong>Tela de Bloqueio:</strong> As intents possuem permissões <code className="text-indigo-300">WAKE_LOCK</code> e prioridade máxima para tocar som contínuo e vibrar mesmo com o aparelho bloqueado.
-            </p>
-            <p>
-              • <strong>Isolamento Multi-usuário:</strong> Subcoleções no Firestore <code className="text-indigo-300">/users/{'{userId}'}/reminders</code> garantem 100% de privacidade para Michel e Maya.
-            </p>
-            <button
-              onClick={() => setShowInfoModal(false)}
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold mt-4 transition"
-            >
-              Fechar
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Toast Notification */}
       {toastMessage && (

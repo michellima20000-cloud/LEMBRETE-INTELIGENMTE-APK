@@ -7,19 +7,6 @@ data class UserProfile(
     val avatarLetter: String = name.take(1).uppercase()
 )
 
-val USER_MICHEL = UserProfile(
-    uid = "usr_68dd8a516780b021",
-    name = "Michel",
-    email = "michel.lima123@gmail.com",
-    avatarLetter = "M"
-)
-
-val USER_MAYA = UserProfile(
-    uid = "CiEoITiFP2PqVjFYzu0HZ3TXBmt2",
-    name = "Maya",
-    email = "mayalimaalves50@gmail.com",
-    avatarLetter = "M"
-)
 
 data class Reminder(
     val id: String,
